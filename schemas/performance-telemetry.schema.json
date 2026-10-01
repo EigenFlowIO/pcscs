@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/EigenFlowIO/pcscs/schemas/performance-telemetry.schema.json",
+  "title": "PCSCS Performance Telemetry",
+  "type": "object",
+  "required": ["schema_version", "summary", "phases", "layers", "samples", "environment"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "started_utc": {"type": ["string", "null"]},
+    "finished_utc": {"type": ["string", "null"]},
+    "sampling_interval_s": {"type": "number", "exclusiveMinimum": 0},
+    "environment": {"type": "object"},
+    "summary": {"type": "object"},
+    "phases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "duration_s"],
+        "properties": {
+          "name": {"type": "string"},
+          "duration_s": {"type": "number", "minimum": 0},
+          "ok": {"type": "boolean"},
+          "metadata": {"type": "object"}
+        }
+      }
+    },
+    "layers": {"type": "array", "items": {"type": "object"}},
+    "samples": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["elapsed_s"],
+        "properties": {
+          "elapsed_s": {"type": "number", "minimum": 0},
+          "process_rss_bytes": {"type": ["integer", "null"], "minimum": 0},
+          "process_cpu_percent": {"type": ["number", "null"]},
+          "system_cpu_percent": {"type": ["number", "null"]},
+          "system_memory_percent": {"type": ["number", "null"]},
+          "gpu_utilization_percent": {"type": ["number", "null"]},
+          "gpu_memory_used_bytes": {"type": ["integer", "null"], "minimum": 0},
+          "gpu_memory_total_bytes": {"type": ["integer", "null"], "minimum": 0}
+        }
+      }
+    }
+  }
+}

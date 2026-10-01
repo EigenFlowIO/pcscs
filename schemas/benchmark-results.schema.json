@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/EigenFlowIO/pcscs/schemas/benchmark-results.schema.json",
+  "title": "PCSCS Controlled Benchmark Results",
+  "type": "object",
+  "required": ["schema_version", "benchmark_id", "config_sha256", "configuration", "git", "environment", "conditions", "raw_runs"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "benchmark_id": {"type": "string"},
+    "config_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "configuration": {"type": "object"},
+    "git": {
+      "type": "object",
+      "properties": {
+        "commit": {"type": ["string", "null"]},
+        "branch": {"type": ["string", "null"]},
+        "remote_origin": {"type": ["string", "null"]},
+        "dirty": {"type": "boolean"}
+      }
+    },
+    "environment": {"type": "object"},
+    "conditions": {"type": "object"},
+    "raw_runs": {"type": "array", "items": {"type": "object"}}
+  }
+}

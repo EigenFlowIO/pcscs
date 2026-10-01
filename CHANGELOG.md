@@ -8,3 +8,4 @@
 - Corrected the linear-interpolation fallback to respect NumPy's increasing-x requirement.
 - Corrected spectral connected-component reporting so partial eigendecomposition does not cap the graph component count at `k`.
 - Retained historical public API field names where required for compatibility; documentation defines their current semantics.
+- Added reproducible performance telemetry, a deterministic sample-size scaling benchmark, Colab execution guidance, and machine-readable performance schemas.

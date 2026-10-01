@@ -24,7 +24,8 @@ classifiers = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
-research = ["torchvision>=0.15", "requests>=2.31", "Pillow>=9.5"]
+research = ["torchvision>=0.15", "requests>=2.31", "Pillow>=9.5", "psutil>=5.9"]
+benchmark = ["psutil>=5.9"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

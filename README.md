@@ -252,17 +252,17 @@ A rigorous workflow should define the sample set, representation source, preproc
 
 The workflow separates live data discovery from dataset identity. A candidate pool is archived, a deterministic sample is frozen into a manifest, and each selected image is recorded with provenance metadata and a SHA-256 hash. Subsequent runs materialize and validate that exact frozen sample before analysis.
 
-The included scripts cover:
+The authoritative Colab runner, `experiments/empirical_validation/pcscs_colab_validation.py`, performs the complete validation path and emits one ingestible result bundle. It records the resolved Git commit, freezes and validates the exact specimen sample, extracts VGG16 representations, runs PCSCS, validates the outputs, captures end-to-end performance telemetry, and runs the controlled scaling benchmark.
 
-1. candidate-pool acquisition;
-2. deterministic sample freezing;
-3. sample materialization;
-4. hash and metadata validation;
-5. VGG16 feature extraction;
-6. PCSCS analysis;
-7. result validation.
+See `experiments/empirical_validation/README.md` and `experiments/empirical_validation/COLAB.md` for execution details.
 
-See `experiments/empirical_validation/README.md` for execution details.
+## Performance measurement
+
+PCSCS separates realistic end-to-end telemetry from controlled core-algorithm benchmarking. The validation runner measures the exact configured workflow, including VGG16 inference, feature materialization, per-layer similarity construction, PCSCS analysis, CPU/RAM metrics, and GPU utilization/memory when available.
+
+`benchmarks/benchmark_pcscs.py` separately measures sample-size scaling on deterministic fixed representation matrices. The default benchmark uses sample sizes 25, 50, 100, 200, and 400, with one warm-up and five measured runs per condition.
+
+See `docs/performance.md` for the measurement protocol, output format, and interpretation constraints.
 
 ## Practical interpretation
 
@@ -278,6 +278,8 @@ Cosine similarity is appropriate when angular similarity is meaningful for the r
 src/pcscs/                         package source
 examples/                          runnable examples
 experiments/empirical_validation/ deterministic validation workflow
+benchmarks/                         controlled performance benchmark
+docs/                              package documentation
 tests/                             automated tests
 .github/workflows/                 CI and validation workflows
 ```

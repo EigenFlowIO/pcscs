@@ -15,3 +15,7 @@ experiments/empirical_validation/validation-sample-images.tar.gz.sha256
 
 *.ipynb
 .ipynb_checkpoints/
+
+# Performance benchmark generated material
+benchmark_results/
+experiments/empirical_validation/*_bundle.zip
