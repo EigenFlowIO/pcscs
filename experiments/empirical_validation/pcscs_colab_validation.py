@@ -12,11 +12,13 @@ This is a self-contained validation driver. It:
 7. computes cosine-similarity matrices,
 8. runs the repository PCSCS implementation,
 9. validates the result lineage, and
-10. writes one compact ZIP bundle designed for direct ingestion by ChatGPT.
+10. writes one compact results ZIP designed for direct ingestion by ChatGPT, and
+11. writes a second dataset ZIP containing the exact accepted specimen images.
 
-The raw specimen images and high-dimensional activation tensors are intentionally
-not included in the final ZIP. The frozen manifest contains the GBIF identifiers,
-media URLs, dimensions, and SHA-256 hashes needed to reconstruct the exact sample.
+Candidate media are restricted to explicitly redistributable licenses configured
+in config.json. The default allowlist accepts only CC0 and CC BY media. The image
+bytes are preserved in a separate dataset artifact so repeatability does not depend
+on future availability of GBIF or publisher image servers.
 
 Recommended Colab invocation:
     !python /content/pcscs/experiments/empirical_validation/pcscs_colab_validation.py
@@ -26,6 +28,8 @@ Optional:
 
 The final artifact is:
     /content/pcscs_validation_bundle.zip
+and the frozen image dataset is:
+    /content/pcscs_validation_dataset.zip
 """
 
 from __future__ import annotations
@@ -43,7 +47,6 @@ import subprocess
 import sys
 import traceback
 import zipfile
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urlparse
 from pathlib import Path
 from typing import Any
@@ -51,6 +54,7 @@ from typing import Any
 REPO_URL_DEFAULT = "https://github.com/EigenFlowIO/pcscs.git"
 WORK_ROOT_DEFAULT = Path("/content/pcscs_validation_work")
 BUNDLE_DEFAULT = Path("/content/pcscs_validation_bundle.zip")
+DATASET_BUNDLE_DEFAULT = Path("/content/pcscs_validation_dataset.zip")
 USER_AGENT = "PCSCS-validation/1.0"
 SEED = 0
 
@@ -123,6 +127,64 @@ def still_image_urls(record: dict[str, Any]) -> list[str]:
         if isinstance(url, str) and url.startswith(("http://", "https://")) and url not in urls:
             urls.append(url)
     return urls
+
+
+def normalize_media_license(value: Any) -> str | None:
+    """Normalize clearly redistributable Creative Commons media licenses.
+
+    GBIF multimedia licenses are publisher-supplied strings. We intentionally
+    recognize only licenses whose redistribution terms are unambiguous for a
+    public reproducibility dataset. Non-commercial, share-alike, all-rights-
+    reserved, blank, and unknown values are rejected by default.
+    """
+    if not isinstance(value, str) or not value.strip():
+        return None
+    low = value.strip().lower().replace("https://", "http://")
+    compact = " ".join(low.replace("_", " ").replace("-", " ").split())
+
+    if "creativecommons.org/publicdomain/zero/" in low or compact in {
+        "cc0", "cc0 1.0", "creative commons zero", "creative commons zero 1.0"
+    }:
+        return "CC0"
+
+    # Reject restrictive variants before accepting generic attribution text.
+    if any(token in low for token in ("/by-nc/", "/by-sa/", "/by-nd/", "/by-nc-sa/", "/by-nc-nd/")):
+        return None
+    if any(token in compact for token in ("cc by nc", "cc by sa", "cc by nd")):
+        return None
+    if "creativecommons.org/licenses/by/" in low or compact in {
+        "cc by", "cc by 2.0", "cc by 2.5", "cc by 3.0", "cc by 4.0",
+        "creative commons attribution", "creative commons attribution 4.0",
+    }:
+        return "CC-BY"
+    return None
+
+
+def still_image_records(record: dict[str, Any], allowlist: set[str]) -> list[dict[str, Any]]:
+    """Return StillImage media records whose exact media license is allowed."""
+    rows: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for media in record.get("media", []):
+        if media.get("type") != "StillImage":
+            continue
+        identifier = media.get("identifier")
+        if not isinstance(identifier, str) or not identifier.startswith(("http://", "https://")):
+            continue
+        normalized = normalize_media_license(media.get("license"))
+        if normalized not in allowlist or identifier in seen:
+            continue
+        seen.add(identifier)
+        rows.append({
+            "identifier": identifier,
+            "license": media.get("license"),
+            "normalized_license": normalized,
+            "creator": media.get("creator"),
+            "rights_holder": media.get("rightsHolder"),
+            "publisher": media.get("publisher"),
+            "references": media.get("references"),
+            "title": media.get("title"),
+        })
+    return rows
 
 
 def still_image_references(record: dict[str, Any]) -> list[str]:
@@ -242,6 +304,7 @@ def build_candidate_pool(cfg: dict[str, Any], config_path: Path, data_dir: Path)
     }
 
     limit = int(cfg["candidate_pool_per_family"])
+    allowlist = set(cfg.get("media_license_allowlist", ["CC0", "CC-BY"]))
     for fam in cfg["families"]:
         family = fam["family"]
         m = session.get(gbif_match, params={"name": family}, timeout=30)
@@ -261,16 +324,18 @@ def build_candidate_pool(cfg: dict[str, Any], config_path: Path, data_dir: Path)
 
         candidates = []
         for rec in r.json().get("results", []):
-            urls = still_image_urls(rec)
+            media_rows = still_image_records(rec, allowlist)
             refs = still_image_references(rec)
             key = rec.get("key")
-            if key is None or not urls:
+            if key is None or not media_rows:
                 continue
+            urls = [m["identifier"] for m in media_rows]
             candidates.append(
                 {
                     "occurrence_key": int(key),
                     "media_url": urls[0],
                     "media_identifiers": urls,
+                    "media_records": media_rows,
                     "media_references": refs,
                     "scientific_name": rec.get("scientificName"),
                     "species": rec.get("species"),
@@ -282,7 +347,11 @@ def build_candidate_pool(cfg: dict[str, Any], config_path: Path, data_dir: Path)
 
         candidates.sort(key=lambda x: (x["occurrence_key"], x["media_url"]))
         out["families"].append({**fam, "gbif_usage_key": usage_key, "candidates": candidates})
-        print(f"{family}: {len(candidates)} candidates", flush=True)
+        print(
+            f"{family}: {len(candidates)} candidates with allowed media licenses "
+            f"({', '.join(sorted(allowlist))})",
+            flush=True,
+        )
 
     candidate_pool_path = data_dir / "candidate-pool.json"
     dump_json(candidate_pool_path, out)
@@ -338,6 +407,11 @@ def _find_next_valid_candidate(
                 diag["failures"]["below_minimum_dimensions"] = diag["failures"].get("below_minimum_dimensions", 0) + 1
                 continue
 
+            media_record = next(
+                (m for m in cand.get("media_records", []) if m.get("identifier") == successful_identifier),
+                {},
+            )
+
             return ({
                 "family": family,
                 "imagenet_class": fam["imagenet_class"],
@@ -347,6 +421,12 @@ def _find_next_valid_candidate(
                 "publisher_media_identifier": successful_identifier,
                 "gbif_cache_url": cache_url,
                 "original_media_url": cand.get("media_url"),
+                "media_license": media_record.get("license"),
+                "media_license_normalized": media_record.get("normalized_license"),
+                "media_creator": media_record.get("creator"),
+                "media_rights_holder": media_record.get("rights_holder"),
+                "media_publisher": media_record.get("publisher"),
+                "media_reference": media_record.get("references"),
                 "downloaded_content_type": content_type,
                 "raw_bytes": raw,
                 "width": width,
@@ -504,11 +584,14 @@ def freeze_sample(
         "candidate_pool_generated_utc": pool.get("generated_utc"),
         "selection_rule": (
             "Deterministic adaptive round-robin across configured family strata. "
+            "Only StillImage media with an exact license normalized to the configured "
+            "media_license_allowlist are eligible. "
             "Families are visited in config order; each active family contributes at most one "
             "valid specimen per round. Families that exhaust accessible candidates are skipped, "
             "and remaining families continue until target_total is reached. No per-family quota is enforced."
         ),
         "target_total": target_total,
+        "media_license_allowlist": cfg.get("media_license_allowlist", ["CC0", "CC-BY"]),
         "family_counts": dict(sorted(family_counts.items())),
         "samples": selected,
     }
@@ -545,7 +628,14 @@ def validate_sample(
     if unexpected:
         errors.append(f"unexpected families: {sorted(unexpected)}")
 
+    allowed_licenses = set(cfg.get("media_license_allowlist", ["CC0", "CC-BY"]))
+
     for row in samples:
+        if row.get("media_license_normalized") not in allowed_licenses:
+            errors.append(
+                f"disallowed or missing media license {row.get('media_license_normalized')!r} "
+                f"for {row.get('filename')}"
+            )
         path = image_dir / row["filename"]
         if not path.exists():
             errors.append(f"missing {row['filename']}")
@@ -1037,6 +1127,12 @@ def write_manifest_csv(manifest_path: Path, out_path: Path) -> None:
         "collection_code",
         "catalog_number",
         "media_url",
+        "media_license",
+        "media_license_normalized",
+        "media_creator",
+        "media_rights_holder",
+        "media_publisher",
+        "media_reference",
         "filename",
         "sha256",
         "width",
@@ -1046,6 +1142,79 @@ def write_manifest_csv(manifest_path: Path, out_path: Path) -> None:
         writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows)
+
+
+def write_image_licenses_csv(manifest_path: Path, out_path: Path) -> None:
+    rows = load_json(manifest_path)["samples"]
+    fields = [
+        "sample_index", "filename", "sha256", "occurrence_key", "family",
+        "scientific_name", "institution_code", "collection_code", "catalog_number",
+        "media_license", "media_license_normalized", "media_creator",
+        "media_rights_holder", "media_publisher", "media_reference",
+        "original_media_url", "gbif_cache_url",
+    ]
+    with out_path.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def make_dataset_zip(
+    config_path: Path,
+    manifest_path: Path,
+    image_dir: Path,
+    zip_path: Path,
+) -> dict[str, Any]:
+    """Create a self-contained frozen image dataset for static repeatability."""
+    tmp = zip_path.parent / "pcscs_validation_dataset_work"
+    if tmp.exists():
+        shutil.rmtree(tmp)
+    tmp.mkdir(parents=True)
+    images_out = tmp / "images"
+    images_out.mkdir()
+
+    shutil.copy2(config_path, tmp / "config.json")
+    shutil.copy2(manifest_path, tmp / "sample-manifest.json")
+    write_manifest_csv(manifest_path, tmp / "sample_manifest.csv")
+    write_image_licenses_csv(manifest_path, tmp / "IMAGE_LICENSES.csv")
+
+    manifest = load_json(manifest_path)
+    for row in manifest["samples"]:
+        src = image_dir / row["filename"]
+        if not src.exists() or sha256_file(src) != row["sha256"]:
+            raise RuntimeError(f"Cannot freeze dataset: image mismatch {row['filename']}")
+        shutil.copy2(src, images_out / row["filename"])
+
+    metadata = {
+        "schema_version": 1,
+        "dataset_id": f"{manifest.get('experiment_id', 'pcscs-validation')}-static-images",
+        "created_utc": utc_now(),
+        "sample_count": len(manifest["samples"]),
+        "manifest_sha256": sha256_file(manifest_path),
+        "license_policy": (
+            "Every included image was selected only when GBIF supplied an exact multimedia "
+            "license normalized to CC0 or CC-BY. IMAGE_LICENSES.csv preserves the original "
+            "license and attribution metadata. Third-party image licenses are separate from "
+            "the PCSCS software license."
+        ),
+    }
+    dump_json(tmp / "dataset-metadata.json", metadata)
+    (tmp / "README.txt").write_text(
+        "PCSCS frozen empirical image dataset.\n"
+        "These are the exact image bytes used by the validation run.\n"
+        "Verify checksums before analysis. Image licenses are recorded in IMAGE_LICENSES.csv.\n",
+        encoding="utf-8",
+    )
+    write_checksums(tmp)
+    make_zip(tmp, zip_path)
+    result = {
+        "path": str(zip_path),
+        "sha256": sha256_file(zip_path),
+        "sample_count": len(manifest["samples"]),
+        "manifest_sha256": sha256_file(manifest_path),
+    }
+    shutil.rmtree(tmp)
+    return result
 
 
 def write_source_hashes(repo_dir: Path, out_path: Path) -> None:
@@ -1142,7 +1311,7 @@ def collect_bundle(
         "Upload pcscs_validation_bundle.zip to ChatGPT.\n"
         "The bundle contains the frozen sample definition, exact source hashes, scientific PCSCS outputs, "
         "end-to-end performance telemetry, controlled scaling benchmark results, environment metadata, and checksums.\n"
-        "Raw GBIF images and multi-gigabyte activation tensors are excluded; the manifest preserves image URLs and SHA-256 hashes.\n",
+        "Raw images are stored separately in pcscs_validation_dataset.zip; multi-gigabyte activation tensors are excluded.\n",
         encoding="utf-8",
     )
     write_checksums(bundle_dir)
@@ -1179,6 +1348,7 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument("--work-root", type=Path, default=WORK_ROOT_DEFAULT)
     p.add_argument("--output", type=Path, default=BUNDLE_DEFAULT)
+    p.add_argument("--dataset-output", type=Path, default=DATASET_BUNDLE_DEFAULT)
     p.add_argument("--telemetry-interval", type=float, default=1.0)
     p.add_argument(
         "--skip-benchmark",
@@ -1275,6 +1445,16 @@ def main() -> None:
             with monitor.phase("controlled_scaling_benchmark"):
                 run(cmd, cwd=repo_dir)
             status["stages"].append({"stage": "controlled_scaling_benchmark", "ok": True})
+
+        with monitor.phase("freeze_static_dataset"):
+            dataset_artifact = make_dataset_zip(
+                config_path,
+                manifest_path,
+                image_dir,
+                args.dataset_output,
+            )
+        status["dataset_artifact"] = dataset_artifact
+        status["stages"].append({"stage": "freeze_static_dataset", "ok": True})
 
         status["success"] = True
 

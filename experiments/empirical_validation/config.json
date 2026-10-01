@@ -1,10 +1,14 @@
 {
   "experiment_id": "PCSCS-EMPIRICAL-VALIDATION-2026",
   "selection_design": "deterministic_adaptive_round_robin_family_stratified_gbif_cache",
-  "target_total": 180,
+  "target_total": 250,
   "minimum_width": 200,
   "minimum_height": 200,
-  "candidate_pool_per_family": 120,
+  "candidate_pool_per_family": 300,
+  "media_license_allowlist": [
+    "CC0",
+    "CC-BY"
+  ],
   "gbif": {
     "basisOfRecord": "PRESERVED_SPECIMEN",
     "mediaType": "StillImage"

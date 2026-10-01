@@ -17,12 +17,10 @@ def load_cache_module():
     return module
 
 
-def test_frozen_manifest_defines_180_samples():
-    manifest = json.loads((STATIC_DIR / "sample-manifest.json").read_text(encoding="utf-8"))
-    assert manifest["target_total"] == 180
-    assert len(manifest["samples"]) == 180
-    assert len({row["filename"] for row in manifest["samples"]}) == 180
-    assert all(len(row["sha256"]) == 64 for row in manifest["samples"])
+def test_static_dataset_directory_is_repository_target():
+    readme = (STATIC_DIR / "README.md").read_text(encoding="utf-8")
+    assert "pcscs_validation_dataset.zip" in readme
+    assert "never falls back to GBIF" in readme
 
 
 def test_verify_materialized_dataset_on_tiny_fixture(tmp_path):

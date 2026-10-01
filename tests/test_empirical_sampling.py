@@ -35,6 +35,51 @@ def test_still_image_urls_uses_identifiers_not_reference_pages():
     assert module.still_image_references(rec) == ["https://example.org/a-page"]
 
 
+def test_media_license_normalization_accepts_only_permissive_defaults():
+    assert module.normalize_media_license("https://creativecommons.org/publicdomain/zero/1.0/") == "CC0"
+    assert module.normalize_media_license("CC0 1.0") == "CC0"
+    assert module.normalize_media_license("https://creativecommons.org/licenses/by/4.0/") == "CC-BY"
+    assert module.normalize_media_license("CC BY 4.0") == "CC-BY"
+    assert module.normalize_media_license("https://creativecommons.org/licenses/by-nc/4.0/") is None
+    assert module.normalize_media_license("CC BY-SA 4.0") is None
+    assert module.normalize_media_license("") is None
+
+
+def test_still_image_records_filters_by_exact_media_license():
+    rec = {
+        "media": [
+            {
+                "type": "StillImage",
+                "identifier": "https://example.org/cc0.jpg",
+                "license": "https://creativecommons.org/publicdomain/zero/1.0/",
+                "creator": "A. Example",
+            },
+            {
+                "type": "StillImage",
+                "identifier": "https://example.org/by.jpg",
+                "license": "CC BY 4.0",
+                "rightsHolder": "Example Museum",
+            },
+            {
+                "type": "StillImage",
+                "identifier": "https://example.org/nc.jpg",
+                "license": "CC BY-NC 4.0",
+            },
+            {
+                "type": "StillImage",
+                "identifier": "https://example.org/unknown.jpg",
+            },
+        ]
+    }
+    rows = module.still_image_records(rec, {"CC0", "CC-BY"})
+    assert [x["identifier"] for x in rows] == [
+        "https://example.org/cc0.jpg",
+        "https://example.org/by.jpg",
+    ]
+    assert rows[0]["normalized_license"] == "CC0"
+    assert rows[1]["normalized_license"] == "CC-BY"
+
+
 def test_gbif_occurrence_cache_url_matches_documented_addressing():
     identifier = "https://example.org/specimen.jpg"
     expected_md5 = hashlib.md5(identifier.encode("utf-8")).hexdigest()
@@ -68,6 +113,7 @@ def test_validate_sample_allows_unequal_family_counts(tmp_path: Path):
             "sample_index": i,
             "occurrence_key": i + 1,
             "family": family,
+            "media_license_normalized": "CC0",
             "filename": name,
             "sha256": _sha(path),
             "width": 3,

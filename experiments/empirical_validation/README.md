@@ -14,7 +14,9 @@ GBIF is a live upstream database, so a future API query is not the definition of
 4. record occurrence identifiers, URLs, dimensions, local filenames, and SHA-256 hashes in `sample-manifest.json`;
 5. use that frozen manifest as the exact sample definition for the run.
 
-The configured design targets 180 total specimens across 15 family strata. Family counts are not hard-coded: selection proceeds round-robin across families and automatically redistributes unavailable slots to families with additional valid candidates. The frozen manifest records the realized family counts.
+The configured design targets 250 total specimens across 15 family strata. Family counts are not hard-coded: selection proceeds round-robin across families and automatically redistributes unavailable slots to families with additional valid candidates. The frozen manifest records the realized family counts.
+
+Candidate images are license-filtered before any image download. The current validation configuration accepts only multimedia records whose exact GBIF media license can be normalized to **CC0** or **CC BY**. CC BY-NC, CC BY-SA, unknown/blank licenses, and other restrictive or ambiguous media licenses are excluded from the candidate pool. The selected manifest preserves the original media license, normalized license, creator, rights holder, publisher, and media reference for each image.
 
 ## Analytical path
 
@@ -41,9 +43,14 @@ The runner also invokes `benchmarks/benchmark_pcscs.py` after the scientific val
 
 See `COLAB.md` for the single-cell execution command.
 
-## Output bundle
+## Output artifacts
 
-The default Colab output is `/content/pcscs_validation_bundle.zip`. It contains machine-readable scientific results, telemetry, benchmark results, frozen sample metadata, source hashes, environment metadata, and SHA-256 checksums. Raw source images and multi-gigabyte activation tensors are excluded from the bundle; the frozen manifest preserves the information required to reconstruct and verify the exact image sample.
+The default Colab run creates two artifacts:
+
+- `/content/pcscs_validation_bundle.zip` — machine-readable scientific results, telemetry, benchmark results, frozen sample metadata, source hashes, environment metadata, and SHA-256 checksums;
+- `/content/pcscs_validation_dataset.zip` — the exact accepted image bytes, frozen manifest, manifest CSV, per-image license/attribution ledger, dataset metadata, and checksums.
+
+Multi-gigabyte activation tensors remain excluded. The dataset ZIP is the intended source for populating the repository's static repeatability dataset after the run is accepted.
 
 ## Component scripts
 
@@ -53,7 +60,7 @@ The `scripts/` directory retains smaller workflow components for development, te
 
 The live validation runner remains the acquisition-and-validation workflow. A separate static repeatability path is provided so later runs can use the exact accepted image bytes without querying GBIF or contacting image servers.
 
-The frozen definition lives in `static_dataset/sample-manifest.json`. The exact 180 images belong in `static_dataset/images/`; each filename, SHA-256 hash, and image dimensions are fixed by that manifest.
+The frozen definition lives in `static_dataset/sample-manifest.json`. Once the new 250-image licensed validation run is accepted, the exact images from `pcscs_validation_dataset.zip` belong in `static_dataset/images/`; each filename, SHA-256 hash, image dimensions, and media-license record are fixed by that manifest.
 
 To materialize the image set once from the already frozen manifest:
 

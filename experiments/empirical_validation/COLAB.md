@@ -11,6 +11,7 @@ from google.colab import files
 COMMIT = "<VERIFIED_GIT_COMMIT>"
 RUNNER = "/content/pcscs_colab_validation.py"
 BUNDLE = "/content/pcscs_validation_bundle.zip"
+DATASET = "/content/pcscs_validation_dataset.zip"
 
 subprocess.run([
     "wget", "-q",
@@ -25,10 +26,11 @@ subprocess.run([
 ], check=True)
 
 files.download(BUNDLE)
+files.download(DATASET)
 ```
 
 The explicit commit pin is required for the definitive run. The runner itself clones the repository at that exact commit and records the resolved commit in the output bundle.
 
-The bundle contains the frozen sample manifest, source hashes, scientific result arrays, layer metrics, full performance telemetry, the controlled scaling benchmark, environment metadata, and SHA-256 checksums.
+The results bundle contains the frozen sample manifest, source hashes, scientific result arrays, layer metrics, full performance telemetry, the controlled scaling benchmark, environment metadata, and SHA-256 checksums. The dataset bundle contains the exact accepted image bytes plus per-image license and attribution metadata so the static repeatability dataset can be committed without depending on future remote-image availability.
 
 For a quick infrastructure-only check of the benchmark path, the validation runner accepts `--benchmark-sample-sizes`, but a reduced size list is not a substitute for the configured definitive execution.

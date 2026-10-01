@@ -15,3 +15,7 @@
 
 - Added a frozen static validation-sample definition plus one-time image materialization and hash verification tooling.
 - Added `static_repeatability.py`, which reruns the scientific validation from committed image bytes without GBIF sample queries or image retrieval.
+- Restricted new empirical-validation candidate media to explicitly redistributable CC0 and CC BY licenses, with per-image license/attribution metadata preserved in the frozen manifest.
+- Increased the configured validation sample target from 180 to 250 specimens and expanded candidate discovery to 300 records per family stratum.
+- Added a separate `pcscs_validation_dataset.zip` artifact containing the exact accepted image bytes, image-license ledger, frozen manifest, and checksums for later static repeatability.
+- Removed the incomplete 180-image static-dataset placeholder so only an accepted frozen dataset is installed into `static_dataset/`.
