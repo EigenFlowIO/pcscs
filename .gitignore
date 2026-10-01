@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+dist/
+build/
+*.egg-info/
+
+# Empirical validation generated material
+experiments/empirical_validation/data/images/
+experiments/empirical_validation/results/*
+!experiments/empirical_validation/results/.gitkeep
+experiments/empirical_validation/validation-sample-images.tar.gz
+experiments/empirical_validation/validation-sample-images.tar.gz.sha256
+
+*.ipynb
+.ipynb_checkpoints/

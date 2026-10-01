@@ -1,0 +1,113 @@
+{
+  "experiment_id": "PCSCS-EMPIRICAL-VALIDATION-2026",
+  "selection_design": "balanced_family_stratified_gbif_preserved_specimens",
+  "target_total": 180,
+  "target_per_family": 12,
+  "minimum_width": 200,
+  "minimum_height": 200,
+  "candidate_pool_per_family": 120,
+  "gbif": {
+    "basisOfRecord": "PRESERVED_SPECIMEN",
+    "mediaType": "StillImage"
+  },
+  "families": [
+    {
+      "family": "Coccinellidae",
+      "imagenet_class": "ladybug",
+      "imagenet_index": 301
+    },
+    {
+      "family": "Scarabaeidae",
+      "imagenet_class": "dung beetle",
+      "imagenet_index": 305
+    },
+    {
+      "family": "Carabidae",
+      "imagenet_class": "ground beetle",
+      "imagenet_index": 302
+    },
+    {
+      "family": "Cicindelidae",
+      "imagenet_class": "tiger beetle",
+      "imagenet_index": 300
+    },
+    {
+      "family": "Nymphalidae",
+      "imagenet_class": "monarch",
+      "imagenet_index": 323
+    },
+    {
+      "family": "Papilionidae",
+      "imagenet_class": "admiral",
+      "imagenet_index": 321
+    },
+    {
+      "family": "Pieridae",
+      "imagenet_class": "cabbage butterfly",
+      "imagenet_index": 324
+    },
+    {
+      "family": "Araneidae",
+      "imagenet_class": "garden spider",
+      "imagenet_index": 74
+    },
+    {
+      "family": "Salticidae",
+      "imagenet_class": "barn spider",
+      "imagenet_index": 73
+    },
+    {
+      "family": "Theraphosidae",
+      "imagenet_class": "tarantula",
+      "imagenet_index": 76
+    },
+    {
+      "family": "Cancridae",
+      "imagenet_class": "Dungeness crab",
+      "imagenet_index": 118
+    },
+    {
+      "family": "Nephropidae",
+      "imagenet_class": "American lobster",
+      "imagenet_index": 122
+    },
+    {
+      "family": "Apidae",
+      "imagenet_class": "bee",
+      "imagenet_index": 309
+    },
+    {
+      "family": "Formicidae",
+      "imagenet_class": "ant",
+      "imagenet_index": 310
+    },
+    {
+      "family": "Libellulidae",
+      "imagenet_class": "dragonfly",
+      "imagenet_index": 319
+    }
+  ],
+  "model": {
+    "architecture": "vgg16",
+    "torchvision_weights": "IMAGENET1K_V1",
+    "layers": [
+      "features.0",
+      "features.2",
+      "features.5",
+      "features.7",
+      "features.10",
+      "features.12",
+      "features.14",
+      "features.17",
+      "features.19",
+      "features.21",
+      "features.24",
+      "features.26",
+      "features.28"
+    ]
+  },
+  "pcscs": {
+    "n_steps": 1000,
+    "enable_tracking": true
+  }
+}

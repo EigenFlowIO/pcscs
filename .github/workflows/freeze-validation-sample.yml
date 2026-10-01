@@ -1,0 +1,44 @@
+name: freeze-validation-sample
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  freeze-sample:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install research environment
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[research]"
+      - name: Query GBIF candidate pool
+        run: python experiments/empirical_validation/scripts/build_candidate_pool.py
+      - name: Freeze deterministic sample manifest
+        run: python experiments/empirical_validation/scripts/freeze_sample_manifest.py
+      - name: Validate frozen sample
+        run: python experiments/empirical_validation/scripts/validate_sample.py
+      - name: Archive frozen sample files
+        run: |
+          cd experiments/empirical_validation
+          tar -czf validation-sample-images.tar.gz data/images
+          sha256sum validation-sample-images.tar.gz > validation-sample-images.tar.gz.sha256
+      - name: Upload frozen sample provenance
+        uses: actions/upload-artifact@v4
+        with:
+          name: pcscs-validation-sample
+          if-no-files-found: error
+          retention-days: 90
+          path: |
+            experiments/empirical_validation/data/candidate-pool.json
+            experiments/empirical_validation/data/sample-manifest.json
+            experiments/empirical_validation/validation-sample-images.tar.gz
+            experiments/empirical_validation/validation-sample-images.tar.gz.sha256
