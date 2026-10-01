@@ -250,9 +250,11 @@ A rigorous workflow should define the sample set, representation source, preproc
 
 `experiments/empirical_validation/` contains a deterministic end-to-end validation pipeline built around preserved museum specimens from GBIF and VGG16 representations.
 
-The workflow separates live data discovery from dataset identity. A candidate pool is archived, a deterministic sample is frozen into a manifest, and each selected image is recorded with provenance metadata and a SHA-256 hash. Subsequent runs materialize and validate that exact frozen sample before analysis.
+The workflow separates live data discovery from dataset identity. A candidate pool is archived, a deterministic sample is frozen into a manifest, and each selected image is recorded with provenance metadata and a SHA-256 hash.
 
-The authoritative Colab runner, `experiments/empirical_validation/pcscs_colab_validation.py`, performs the complete validation path and emits one ingestible result bundle. It records the resolved Git commit, freezes and validates the exact specimen sample, extracts VGG16 representations, runs PCSCS, validates the outputs, captures end-to-end performance telemetry, and runs the controlled scaling benchmark.
+The authoritative Colab runner, `experiments/empirical_validation/pcscs_colab_validation.py`, performs the complete live acquisition-and-validation path and emits one ingestible result bundle. It records the resolved Git commit, freezes and validates the exact specimen sample, extracts VGG16 representations, runs PCSCS, validates the outputs, captures end-to-end performance telemetry, and runs the controlled scaling benchmark.
+
+For static repeatability, the repository also defines `experiments/empirical_validation/static_dataset/`. `cache_static_dataset.py` materializes the exact already-frozen image bytes once and accepts them only when their SHA-256 hashes and dimensions match the definitive manifest. `static_repeatability.py` then reruns the same scientific-analysis functions from the committed image set without re-querying GBIF or retrieving specimen images.
 
 See `experiments/empirical_validation/README.md` and `experiments/empirical_validation/COLAB.md` for execution details.
 

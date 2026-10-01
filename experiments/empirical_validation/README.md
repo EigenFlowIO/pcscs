@@ -48,3 +48,35 @@ The default Colab output is `/content/pcscs_validation_bundle.zip`. It contains 
 ## Component scripts
 
 The `scripts/` directory retains smaller workflow components for development, testing, and targeted maintenance. The definitive end-to-end execution is the authoritative runner above; the component scripts are not an alternate validation definition.
+
+## Static repeatability dataset
+
+The live validation runner remains the acquisition-and-validation workflow. A separate static repeatability path is provided so later runs can use the exact accepted image bytes without querying GBIF or contacting image servers.
+
+The frozen definition lives in `static_dataset/sample-manifest.json`. The exact 180 images belong in `static_dataset/images/`; each filename, SHA-256 hash, and image dimensions are fixed by that manifest.
+
+To materialize the image set once from the already frozen manifest:
+
+```bash
+python experiments/empirical_validation/cache_static_dataset.py
+```
+
+The cache utility does **not** perform sample selection. It requests only the GBIF cache URLs already recorded in the definitive manifest and rejects any downloaded file whose SHA-256 or dimensions differ from the recorded sample. It also writes `checksums.sha256`, `dataset-metadata.json`, and `IMAGE_LICENSES.csv`.
+
+After the images are present, an offline image-sample verification can be run with:
+
+```bash
+python experiments/empirical_validation/cache_static_dataset.py --verify-only
+```
+
+The repeatability analysis is then run with:
+
+```bash
+python experiments/empirical_validation/static_repeatability.py
+```
+
+`static_repeatability.py` performs no GBIF sample query and no image download. It verifies the committed static dataset first, then invokes the same VGG16 feature-extraction and PCSCS scientific-analysis functions used by `pcscs_colab_validation.py`.
+
+The static image set is intentionally separate from the live acquisition logic: the live runner can construct a new empirical sample when needed, while the static runner reproduces the frozen reference sample byte-for-byte.
+
+Before distributing the cached image files publicly, review `IMAGE_LICENSES.csv` and the source media rights. The cache utility records available GBIF/media rights metadata but does not make a legal determination about redistribution.

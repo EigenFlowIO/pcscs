@@ -12,3 +12,6 @@
 - Reworked GBIF sample freezing so family counts are adaptive rather than hard quotas: selection now proceeds deterministically round-robin across configured family strata until the total sample target is reached.
 - Switched empirical image acquisition to the GBIF occurrence-image cache using a single shared HTTP session; publisher media identifiers remain frozen as provenance and sample-selection diagnostics record cache failures.
 - Added a measured Tesla T4 reference performance profile and fixed benchmark CSV export so condition sample counts cannot be overwritten by telemetry sample counts.
+
+- Added a frozen static validation-sample definition plus one-time image materialization and hash verification tooling.
+- Added `static_repeatability.py`, which reruns the scientific validation from committed image bytes without GBIF sample queries or image retrieval.
