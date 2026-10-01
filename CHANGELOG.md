@@ -9,3 +9,5 @@
 - Corrected spectral connected-component reporting so partial eigendecomposition does not cap the graph component count at `k`.
 - Retained historical public API field names where required for compatibility; documentation defines their current semantics.
 - Added reproducible performance telemetry, a deterministic sample-size scaling benchmark, Colab execution guidance, and machine-readable performance schemas.
+- Reworked GBIF sample freezing so family counts are adaptive rather than hard quotas: selection now proceeds deterministically round-robin across configured family strata until the total sample target is reached.
+- Added multi-URL media fallback, browser-compatible request headers, retries, parallel per-family acquisition, and machine-readable sample-selection diagnostics to reduce provider-specific image-access failures.

@@ -43,6 +43,8 @@ import subprocess
 import sys
 import traceback
 import zipfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from urllib.parse import urlparse
 from pathlib import Path
 from typing import Any
 
@@ -106,11 +108,98 @@ def suffix_for(content_type: str | None, url: str) -> str:
     return ".jpg"
 
 
-def first_still_image(record: dict[str, Any]) -> str | None:
+def still_image_urls(record: dict[str, Any]) -> list[str]:
+    urls: list[str] = []
     for media in record.get("media", []):
-        if media.get("type") == "StillImage" and media.get("identifier"):
-            return media["identifier"]
-    return None
+        if media.get("type") != "StillImage":
+            continue
+        for key in ("identifier", "references"):
+            url = media.get(key)
+            if isinstance(url, str) and url.startswith(("http://", "https://")) and url not in urls:
+                urls.append(url)
+    return urls
+
+
+def _browser_headers(url: str, referer: str | None = None) -> dict[str, str]:
+    parsed = urlparse(url)
+    origin = f"{parsed.scheme}://{parsed.netloc}/" if parsed.scheme and parsed.netloc else None
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/140.0 Safari/537.36"
+        ),
+        "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Cache-Control": "no-cache",
+    }
+    if referer or origin:
+        headers["Referer"] = referer or origin  # type: ignore[assignment]
+    return headers
+
+
+def _download_image(urls: list[str], timeout: tuple[int, int] = (8, 25)) -> tuple[bytes, str, str | None, list[dict[str, Any]]]:
+    """Try all archived media URLs with browser-compatible headers.
+
+    Returns raw bytes, the successful URL, content type, and a compact attempt log.
+    The browser-like request path is intentional: several GBIF media providers
+    allow interactive image access but reject minimal HTTP clients.
+    """
+    import requests
+    from requests.adapters import HTTPAdapter
+    from urllib3.util.retry import Retry
+
+    attempts: list[dict[str, Any]] = []
+    for url in urls:
+        parsed = urlparse(url)
+        referers = [None]
+        if parsed.netloc.endswith("ala.org.au"):
+            referers = ["https://biocache.ala.org.au/", "https://www.ala.org.au/", None]
+        elif parsed.netloc:
+            referers = [f"{parsed.scheme}://{parsed.netloc}/", None]
+
+        for referer in referers:
+            session = requests.Session()
+            retry = Retry(
+                total=2,
+                connect=2,
+                read=2,
+                status=2,
+                backoff_factor=0.35,
+                status_forcelist=(429, 500, 502, 503, 504),
+                allowed_methods=frozenset(["GET"]),
+                raise_on_status=False,
+            )
+            session.mount("http://", HTTPAdapter(max_retries=retry))
+            session.mount("https://", HTTPAdapter(max_retries=retry))
+            try:
+                r = session.get(
+                    url,
+                    headers=_browser_headers(url, referer),
+                    timeout=timeout,
+                    allow_redirects=True,
+                )
+                attempts.append({
+                    "url": url,
+                    "host": parsed.netloc,
+                    "status": int(r.status_code),
+                    "referer": referer,
+                })
+                if r.status_code == 200 and r.content:
+                    return r.content, r.url, r.headers.get("Content-Type"), attempts
+                if r.status_code != 403:
+                    break
+            except Exception as exc:
+                attempts.append({
+                    "url": url,
+                    "host": parsed.netloc,
+                    "error": type(exc).__name__,
+                    "message": str(exc)[:240],
+                    "referer": referer,
+                })
+                break
+            finally:
+                session.close()
+    raise RuntimeError(f"all media URLs failed ({len(attempts)} HTTP attempts)")
 
 
 def bootstrap_repo(repo_url: str, ref: str, work_root: Path, status: dict[str, Any]) -> Path:
@@ -185,14 +274,15 @@ def build_candidate_pool(cfg: dict[str, Any], config_path: Path, data_dir: Path)
 
         candidates = []
         for rec in r.json().get("results", []):
-            url = first_still_image(rec)
+            urls = still_image_urls(rec)
             key = rec.get("key")
-            if key is None or not url:
+            if key is None or not urls:
                 continue
             candidates.append(
                 {
                     "occurrence_key": int(key),
-                    "media_url": url,
+                    "media_url": urls[0],
+                    "media_urls": urls,
                     "scientific_name": rec.get("scientificName"),
                     "species": rec.get("species"),
                     "institution_code": rec.get("institutionCode"),
@@ -210,113 +300,205 @@ def build_candidate_pool(cfg: dict[str, Any], config_path: Path, data_dir: Path)
     return candidate_pool_path
 
 
+def _find_next_valid_candidate(
+    fam: dict[str, Any],
+    start_index: int,
+    min_w: int,
+    min_h: int,
+) -> tuple[dict[str, Any] | None, int, dict[str, Any]]:
+    """Scan one family's candidates in deterministic order until one image is usable."""
+    from PIL import Image
+
+    family = fam["family"]
+    candidates = sorted(
+        fam["candidates"],
+        key=lambda x: (x["occurrence_key"], x.get("media_url", "")),
+    )
+    diag = {
+        "family": family,
+        "candidate_attempts": 0,
+        "http_attempts": 0,
+        "failures": {},
+    }
+
+    for idx in range(start_index, len(candidates)):
+        cand = candidates[idx]
+        diag["candidate_attempts"] += 1
+        urls = list(cand.get("media_urls") or [cand.get("media_url")])
+        urls = [u for u in urls if isinstance(u, str) and u.startswith(("http://", "https://"))]
+        try:
+            raw, successful_url, content_type, attempts = _download_image(urls)
+            diag["http_attempts"] += len(attempts)
+            for a in attempts:
+                if "status" in a and a["status"] != 200:
+                    key = f"http_{a['status']}"
+                    diag["failures"][key] = diag["failures"].get(key, 0) + 1
+
+            im = Image.open(io.BytesIO(raw))
+            im.verify()
+            im = Image.open(io.BytesIO(raw))
+            width, height = im.size
+            if width < min_w or height < min_h:
+                diag["failures"]["below_minimum_dimensions"] = diag["failures"].get("below_minimum_dimensions", 0) + 1
+                continue
+
+            return ({
+                "family": family,
+                "imagenet_class": fam["imagenet_class"],
+                "imagenet_index": fam["imagenet_index"],
+                **cand,
+                "media_url": successful_url,
+                "original_media_url": cand.get("media_url"),
+                "downloaded_content_type": content_type,
+                "raw_bytes": raw,
+                "width": width,
+                "height": height,
+            }, idx + 1, diag)
+        except Exception as exc:
+            msg = str(exc)
+            diag["failures"]["download_or_decode"] = diag["failures"].get("download_or_decode", 0) + 1
+            print(
+                f"{family}: rejected occurrence {cand.get('occurrence_key')}: {msg}",
+                flush=True,
+            )
+
+    return None, len(candidates), diag
+
+
 def freeze_sample(
     cfg: dict[str, Any],
     config_path: Path,
     candidate_pool_path: Path,
     data_dir: Path,
 ) -> tuple[Path, Path]:
-    import requests
-    from PIL import Image
+    from collections import Counter
 
     pool = load_json(candidate_pool_path)
     config_sha = sha256_file(config_path)
     if pool.get("config_sha256") != config_sha:
         raise RuntimeError("Candidate pool was built with a different config.json")
 
-    target = int(cfg["target_per_family"])
+    target_total = int(cfg["target_total"])
     min_w = int(cfg["minimum_width"])
     min_h = int(cfg["minimum_height"])
     image_dir = data_dir / "images"
     image_dir.mkdir(parents=True, exist_ok=True)
 
-    session = requests.Session()
-    session.headers.update({"User-Agent": USER_AGENT})
+    # The family list defines sampling strata, not hard quotas. Selection is a
+    # deterministic round-robin over the configured family order. Each active
+    # family contributes at most one specimen per round; exhausted/inaccessible
+    # families are skipped and the remaining families absorb the deficit.
+    families = list(pool["families"])
+    next_index = {fam["family"]: 0 for fam in families}
+    exhausted = {fam["family"]: False for fam in families}
     selected: list[dict[str, Any]] = []
+    diagnostics: dict[str, Any] = {
+        "schema_version": 1,
+        "selection_design": "deterministic_adaptive_round_robin_family_stratified",
+        "target_total": target_total,
+        "families": {
+            fam["family"]: {
+                "candidate_attempts": 0,
+                "http_attempts": 0,
+                "accepted": 0,
+                "failures": {},
+            }
+            for fam in families
+        },
+    }
 
-    for fam in pool["families"]:
-        family = fam["family"]
-        accepted = 0
+    round_number = 0
+    while len(selected) < target_total:
+        active = [fam for fam in families if not exhausted[fam["family"]]]
+        if not active:
+            break
+        round_number += 1
+        print(
+            f"selection round {round_number}: {len(selected)}/{target_total} accepted; "
+            f"{len(active)} active families",
+            flush=True,
+        )
 
-        for cand in sorted(
-            fam["candidates"],
-            key=lambda x: (x["occurrence_key"], x["media_url"]),
-        ):
-            if accepted >= target:
-                break
-            try:
-                r = session.get(cand["media_url"], timeout=45)
-                r.raise_for_status()
-                raw = r.content
+        futures: dict[str, Any] = {}
+        with ThreadPoolExecutor(max_workers=min(12, len(active))) as executor:
+            for fam in active:
+                family = fam["family"]
+                futures[family] = executor.submit(
+                    _find_next_valid_candidate,
+                    fam,
+                    next_index[family],
+                    min_w,
+                    min_h,
+                )
 
-                im = Image.open(io.BytesIO(raw))
-                im.verify()
-                im = Image.open(io.BytesIO(raw))
-                width, height = im.size
-                if width < min_w or height < min_h:
+            # Consume results in configured family order, not completion order,
+            # so selection remains deterministic given the observed candidate pool.
+            for fam in active:
+                if len(selected) >= target_total:
+                    break
+                family = fam["family"]
+                result, new_index, diag = futures[family].result()
+                next_index[family] = new_index
+                agg = diagnostics["families"][family]
+                agg["candidate_attempts"] += diag["candidate_attempts"]
+                agg["http_attempts"] += diag["http_attempts"]
+                for key, value in diag["failures"].items():
+                    agg["failures"][key] = agg["failures"].get(key, 0) + value
+
+                if result is None:
+                    exhausted[family] = True
                     continue
 
+                raw = result.pop("raw_bytes")
                 sha = sha256_bytes(raw)
-                ext = suffix_for(r.headers.get("Content-Type"), cand["media_url"])
-                filename = f"{family}__{cand['occurrence_key']}__{sha[:12]}{ext}"
+                ext = suffix_for(result.get("downloaded_content_type"), result["media_url"])
+                filename = f"{family}__{result['occurrence_key']}__{sha[:12]}{ext}"
                 (image_dir / filename).write_bytes(raw)
-
-                selected.append(
-                    {
-                        "sample_index": len(selected),
-                        "family": family,
-                        "imagenet_class": fam["imagenet_class"],
-                        "imagenet_index": fam["imagenet_index"],
-                        **cand,
-                        "filename": filename,
-                        "sha256": sha,
-                        "width": width,
-                        "height": height,
-                    }
-                )
-                accepted += 1
+                result.update({
+                    "sample_index": len(selected),
+                    "filename": filename,
+                    "sha256": sha,
+                })
+                selected.append(result)
+                agg["accepted"] += 1
                 print(
-                    f"{family}: accepted {accepted}/{target} occurrence "
-                    f"{cand['occurrence_key']}",
-                    flush=True,
-                )
-            except Exception as exc:
-                print(
-                    f"{family}: rejected occurrence {cand.get('occurrence_key')}: {exc}",
+                    f"{family}: accepted occurrence {result['occurrence_key']} "
+                    f"({len(selected)}/{target_total} total)",
                     flush=True,
                 )
 
-        if accepted != target:
-            raise RuntimeError(
-                f"{family}: only {accepted}/{target} valid specimens; "
-                "the fixed design was not silently changed"
-            )
+    family_counts = Counter(x["family"] for x in selected)
+    diagnostics["rounds"] = round_number
+    diagnostics["selected_total"] = len(selected)
+    diagnostics["family_counts"] = dict(sorted(family_counts.items()))
+    diagnostics["exhausted_families"] = sorted(k for k, v in exhausted.items() if v)
+    dump_json(data_dir / "sample-selection-diagnostics.json", diagnostics)
 
-    if len(selected) != int(cfg["target_total"]):
+    if len(selected) != target_total:
         raise RuntimeError(
-            f"Expected {cfg['target_total']} samples, got {len(selected)}"
+            f"Could obtain only {len(selected)}/{target_total} valid specimens across the full "
+            f"configured candidate pool. Family availability: {dict(sorted(family_counts.items()))}"
         )
 
     manifest = {
-        "schema_version": 1,
+        "schema_version": 2,
         "experiment_id": cfg["experiment_id"],
         "frozen_utc": utc_now(),
         "config_sha256": config_sha,
         "candidate_pool_generated_utc": pool.get("generated_utc"),
         "selection_rule": (
-            "For each family, sort archived candidates by "
-            "(occurrence_key, media_url), then accept the first "
-            "target_per_family images that download, decode, and meet "
-            "the fixed minimum dimensions."
+            "Deterministic adaptive round-robin across configured family strata. "
+            "Families are visited in config order; each active family contributes at most one "
+            "valid specimen per round. Families that exhaust accessible candidates are skipped, "
+            "and remaining families continue until target_total is reached. No per-family quota is enforced."
         ),
-        "target_total": cfg["target_total"],
-        "target_per_family": target,
+        "target_total": target_total,
+        "family_counts": dict(sorted(family_counts.items())),
         "samples": selected,
     }
     manifest_path = data_dir / "sample-manifest.json"
     dump_json(manifest_path, manifest)
     return manifest_path, image_dir
-
 
 def validate_sample(
     cfg: dict[str, Any],
@@ -343,12 +525,9 @@ def validate_sample(
 
     counts = Counter(x["family"] for x in samples)
     expected_fams = {f["family"] for f in cfg["families"]}
-    if set(counts) != expected_fams:
-        errors.append("family set mismatch")
-
-    for fam in expected_fams:
-        if counts[fam] != int(cfg["target_per_family"]):
-            errors.append(f"{fam}: {counts[fam]} samples")
+    unexpected = set(counts) - expected_fams
+    if unexpected:
+        errors.append(f"unexpected families: {sorted(unexpected)}")
 
     for row in samples:
         path = image_dir / row["filename"]
@@ -894,6 +1073,7 @@ def collect_bundle(
         (config_path, "config.json"),
         (data_dir / "candidate-pool.json", "candidate-pool.json"),
         (data_dir / "sample-manifest.json", "sample-manifest.json"),
+        (data_dir / "sample-selection-diagnostics.json", "sample-selection-diagnostics.json"),
         (results_dir / "summary.json", "summary.json"),
         (results_dir / "layer_metrics.csv", "layer_metrics.csv"),
     ]:

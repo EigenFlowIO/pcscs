@@ -1,8 +1,7 @@
 {
   "experiment_id": "PCSCS-EMPIRICAL-VALIDATION-2026",
-  "selection_design": "balanced_family_stratified_gbif_preserved_specimens",
+  "selection_design": "deterministic_adaptive_round_robin_family_stratified_gbif_preserved_specimens",
   "target_total": 180,
-  "target_per_family": 12,
   "minimum_width": 200,
   "minimum_height": 200,
   "candidate_pool_per_family": 120,
@@ -109,5 +108,10 @@
   "pcscs": {
     "n_steps": 1000,
     "enable_tracking": true
+  },
+  "download": {
+    "connect_timeout_s": 8,
+    "read_timeout_s": 25,
+    "max_parallel_families": 12
   }
 }

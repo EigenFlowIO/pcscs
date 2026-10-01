@@ -2,19 +2,19 @@
 
 This directory contains the reproducible PCSCS empirical-validation workflow. The authoritative entry point is `pcscs_colab_validation.py`.
 
-The runner creates a balanced arthropod specimen sample from GBIF, freezes the exact sample identity, verifies image hashes and dimensions, extracts VGG16 representations, runs PCSCS across the configured layers, validates result lineage, records performance telemetry, executes the controlled PCSCS scaling benchmark, and emits one compact result bundle.
+The runner creates a taxonomically stratified arthropod specimen sample from GBIF, freezes the exact sample identity, verifies image hashes and dimensions, extracts VGG16 representations, runs PCSCS across the configured layers, validates result lineage, records performance telemetry, executes the controlled PCSCS scaling benchmark, and emits one compact result bundle.
 
 ## Dataset identity
 
 GBIF is a live upstream database, so a future API query is not the definition of a validation dataset. The runner therefore separates discovery from identity:
 
 1. query and archive a candidate pool;
-2. deterministically select the configured sample;
+2. deterministically select the configured total sample with adaptive round-robin allocation across family strata;
 3. download and validate each selected image;
 4. record occurrence identifiers, URLs, dimensions, local filenames, and SHA-256 hashes in `sample-manifest.json`;
 5. use that frozen manifest as the exact sample definition for the run.
 
-The configured design currently uses 180 specimens: 15 families with 12 specimens per family.
+The configured design targets 180 total specimens across 15 family strata. Family counts are not hard-coded: selection proceeds round-robin across families and automatically redistributes unavailable slots to families with additional valid candidates. The frozen manifest records the realized family counts.
 
 ## Analytical path
 
