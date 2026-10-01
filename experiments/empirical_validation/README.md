@@ -14,9 +14,9 @@ GBIF is a live upstream database, so a future API query is not the definition of
 4. record occurrence identifiers, URLs, dimensions, local filenames, and SHA-256 hashes in `sample-manifest.json`;
 5. use that frozen manifest as the exact sample definition for the run.
 
-The configured design targets 250 total specimens across 15 family strata. Family counts are not hard-coded: selection proceeds round-robin across families and automatically redistributes unavailable slots to families with additional valid candidates. The frozen manifest records the realized family counts.
+The configured design targets 250 total specimens across 15 family strata. Family counts are not hard-coded: selection proceeds round-robin across families and automatically redistributes unavailable slots to families with additional valid candidates. The frozen manifest records the realized family counts. To avoid a licensed-media shortage in any one stratum, acquisition may scan multiple GBIF occurrence-search pages while retaining only a bounded deterministic licensed candidate pool per family.
 
-Candidate images are license-filtered before any image download. The current validation configuration accepts only multimedia records whose exact GBIF media license can be normalized to **CC0** or **CC BY**. CC BY-NC, CC BY-SA, unknown/blank licenses, and other restrictive or ambiguous media licenses are excluded from the candidate pool. The selected manifest preserves the original media license, normalized license, creator, rights holder, publisher, and media reference for each image.
+Candidate images are license-filtered before any image download. The current validation configuration accepts only multimedia records whose exact GBIF media license can be normalized to **CC0** or **CC BY**. CC BY-NC, CC BY-SA, unknown/blank licenses, and other restrictive or ambiguous media licenses are excluded from the candidate pool. The selected manifest preserves the original media license, normalized license, creator, rights holder, publisher, media reference, publisher image identifier, GBIF cache URL, and a generated attribution string for each image.
 
 ## Analytical path
 

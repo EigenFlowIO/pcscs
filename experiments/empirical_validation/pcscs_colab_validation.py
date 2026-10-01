@@ -160,6 +160,27 @@ def normalize_media_license(value: Any) -> str | None:
     return None
 
 
+def build_media_attribution(media: dict[str, Any], occurrence_key: int, institution_code: str | None = None) -> str:
+    """Build a conservative human-readable attribution string from supplied media metadata."""
+    creator = str(media.get("creator") or "").strip()
+    rights_holder = str(media.get("rightsHolder") or "").strip()
+    publisher = str(media.get("publisher") or "").strip()
+    source = str(media.get("identifier") or "").strip()
+    license_text = str(media.get("license") or "").strip()
+    credit = creator or rights_holder or publisher or (institution_code or "").strip() or "Source provider"
+    parts = [credit]
+    if rights_holder and rights_holder != credit:
+        parts.append(rights_holder)
+    if institution_code and institution_code not in parts:
+        parts.append(institution_code)
+    parts.append(f"GBIF occurrence {int(occurrence_key)}")
+    if license_text:
+        parts.append(license_text)
+    if source:
+        parts.append(source)
+    return " | ".join(parts)
+
+
 def still_image_records(record: dict[str, Any], allowlist: set[str]) -> list[dict[str, Any]]:
     """Return StillImage media records whose exact media license is allowed."""
     rows: list[dict[str, Any]] = []
@@ -313,37 +334,71 @@ def build_candidate_pool(cfg: dict[str, Any], config_path: Path, data_dir: Path)
         if not usage_key:
             raise RuntimeError(f"No GBIF usageKey for {family}")
 
-        params = {
-            "taxonKey": usage_key,
-            "mediaType": cfg["gbif"]["mediaType"],
-            "basisOfRecord": cfg["gbif"]["basisOfRecord"],
-            "limit": min(limit, 300),
-        }
-        r = session.get(gbif_search, params=params, timeout=60)
-        r.raise_for_status()
-
+        scan_limit = int(cfg.get("candidate_scan_limit_per_family", limit))
         candidates = []
-        for rec in r.json().get("results", []):
-            media_rows = still_image_records(rec, allowlist)
-            refs = still_image_references(rec)
-            key = rec.get("key")
-            if key is None or not media_rows:
-                continue
-            urls = [m["identifier"] for m in media_rows]
-            candidates.append(
-                {
-                    "occurrence_key": int(key),
-                    "media_url": urls[0],
-                    "media_identifiers": urls,
-                    "media_records": media_rows,
-                    "media_references": refs,
-                    "scientific_name": rec.get("scientificName"),
-                    "species": rec.get("species"),
-                    "institution_code": rec.get("institutionCode"),
-                    "collection_code": rec.get("collectionCode"),
-                    "catalog_number": rec.get("catalogNumber"),
-                }
-            )
+        seen_occurrences: set[int] = set()
+        scanned = 0
+        offset = 0
+        page_size = min(300, scan_limit)
+        while scanned < scan_limit and len(candidates) < limit:
+            params = {
+                "taxonKey": usage_key,
+                "mediaType": cfg["gbif"]["mediaType"],
+                "basisOfRecord": cfg["gbif"]["basisOfRecord"],
+                "limit": min(page_size, scan_limit - scanned),
+                "offset": offset,
+            }
+            r = session.get(gbif_search, params=params, timeout=60)
+            r.raise_for_status()
+            payload = r.json()
+            results = payload.get("results", [])
+            if not results:
+                break
+            scanned += len(results)
+            offset += len(results)
+
+            for rec in results:
+                media_rows = still_image_records(rec, allowlist)
+                refs = still_image_references(rec)
+                key = rec.get("key")
+                if key is None or not media_rows:
+                    continue
+                key = int(key)
+                if key in seen_occurrences:
+                    continue
+                seen_occurrences.add(key)
+                for media_row in media_rows:
+                    media_row["attribution_text"] = build_media_attribution(
+                        {
+                            "creator": media_row.get("creator"),
+                            "rightsHolder": media_row.get("rights_holder"),
+                            "publisher": media_row.get("publisher"),
+                            "identifier": media_row.get("identifier"),
+                            "license": media_row.get("license"),
+                        },
+                        key,
+                        rec.get("institutionCode"),
+                    )
+                urls = [m["identifier"] for m in media_rows]
+                candidates.append(
+                    {
+                        "occurrence_key": key,
+                        "media_url": urls[0],
+                        "media_identifiers": urls,
+                        "media_records": media_rows,
+                        "media_references": refs,
+                        "scientific_name": rec.get("scientificName"),
+                        "species": rec.get("species"),
+                        "institution_code": rec.get("institutionCode"),
+                        "collection_code": rec.get("collectionCode"),
+                        "catalog_number": rec.get("catalogNumber"),
+                    }
+                )
+                if len(candidates) >= limit:
+                    break
+
+            if payload.get("endOfRecords"):
+                break
 
         candidates.sort(key=lambda x: (x["occurrence_key"], x["media_url"]))
         out["families"].append({**fam, "gbif_usage_key": usage_key, "candidates": candidates})
@@ -427,6 +482,7 @@ def _find_next_valid_candidate(
                 "media_rights_holder": media_record.get("rights_holder"),
                 "media_publisher": media_record.get("publisher"),
                 "media_reference": media_record.get("references"),
+                "media_attribution": media_record.get("attribution_text"),
                 "downloaded_content_type": content_type,
                 "raw_bytes": raw,
                 "width": width,
@@ -636,6 +692,12 @@ def validate_sample(
                 f"disallowed or missing media license {row.get('media_license_normalized')!r} "
                 f"for {row.get('filename')}"
             )
+        if not row.get("media_license"):
+            errors.append(f"missing original media license for {row.get('filename')}")
+        if not row.get("publisher_media_identifier"):
+            errors.append(f"missing publisher media identifier for {row.get('filename')}")
+        if not row.get("media_attribution"):
+            errors.append(f"missing attribution text for {row.get('filename')}")
         path = image_dir / row["filename"]
         if not path.exists():
             errors.append(f"missing {row['filename']}")
@@ -1133,6 +1195,10 @@ def write_manifest_csv(manifest_path: Path, out_path: Path) -> None:
         "media_rights_holder",
         "media_publisher",
         "media_reference",
+        "media_attribution",
+        "publisher_media_identifier",
+        "original_media_url",
+        "gbif_cache_url",
         "filename",
         "sha256",
         "width",
@@ -1151,7 +1217,7 @@ def write_image_licenses_csv(manifest_path: Path, out_path: Path) -> None:
         "scientific_name", "institution_code", "collection_code", "catalog_number",
         "media_license", "media_license_normalized", "media_creator",
         "media_rights_holder", "media_publisher", "media_reference",
-        "original_media_url", "gbif_cache_url",
+        "media_attribution", "original_media_url", "gbif_cache_url",
     ]
     with out_path.open("w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")

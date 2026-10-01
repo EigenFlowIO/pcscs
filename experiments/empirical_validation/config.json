@@ -4,7 +4,8 @@
   "target_total": 250,
   "minimum_width": 200,
   "minimum_height": 200,
-  "candidate_pool_per_family": 300,
+  "candidate_pool_per_family": 120,
+  "candidate_scan_limit_per_family": 900,
   "media_license_allowlist": [
     "CC0",
     "CC-BY"

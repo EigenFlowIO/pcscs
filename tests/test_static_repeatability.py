@@ -46,3 +46,11 @@ def test_verify_materialized_dataset_on_tiny_fixture(tmp_path):
     (dataset / "sample-manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
     rows = mod.verify_materialized_dataset(dataset)
     assert rows[0]["status"] == "ok"
+
+
+def test_static_repeatability_has_no_sample_acquisition_or_url_fallback():
+    source = (ROOT / "experiments" / "empirical_validation" / "static_repeatability.py").read_text(encoding="utf-8")
+    assert "build_candidate_pool(" not in source
+    assert "freeze_sample(" not in source
+    assert "import cache_static_dataset" not in source
+    assert "gbif_cache_url" not in source
