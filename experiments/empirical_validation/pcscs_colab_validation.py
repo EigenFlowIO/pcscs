@@ -128,8 +128,20 @@ def bootstrap_repo(repo_url: str, ref: str, work_root: Path, status: dict[str, A
         "resolved_commit": commit,
     }
 
-    # Use the exact repository code checked out above.
-    run([sys.executable, "-m", "pip", "install", "-q", "-e", f"{repo_dir}[research,benchmark]"])
+    # Install the exact repository checkout into the current interpreter's
+    # existing site-packages path. A non-editable install is intentional here:
+    # editable installs rely on .pth processing at interpreter startup, which
+    # does not occur when pip is invoked from this already-running validation
+    # process (as in Colab).
+    run([sys.executable, "-m", "pip", "install", "-q", f"{repo_dir}[research,benchmark]"])
+
+    # Fail immediately if the package cannot be imported by this same process.
+    # This guards the exact bootstrap failure mode that can otherwise appear
+    # only after a successful pip command in a long-running Colab interpreter.
+    import importlib
+    importlib.invalidate_caches()
+    import pcscs
+    status["repository"]["installed_pcscs_path"] = str(Path(pcscs.__file__).resolve())
     return repo_dir
 
 
@@ -1116,7 +1128,7 @@ def main() -> None:
                 write_checksums(bundle_dir)
 
             make_zip(bundle_dir, args.output)
-            maybe_download_in_colab(args.output, not args.no_download)
+            maybe_download_in_colab(args.output, False if os.environ.get("COLAB_RELEASE_TAG") else (not args.no_download))
         except Exception:
             traceback.print_exc()
 
