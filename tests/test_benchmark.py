@@ -1,4 +1,5 @@
 import importlib.util
+import csv
 import json
 from pathlib import Path
 
@@ -45,4 +46,8 @@ def test_tiny_benchmark_smoke(tmp_path):
     result = mod.run_benchmark(config_path, tmp_path / "out")
     assert "6" in result["conditions"]
     assert (tmp_path / "out" / "benchmark_results.json").exists()
-    assert (tmp_path / "out" / "benchmark_runs.csv").exists()
+    csv_path = tmp_path / "out" / "benchmark_runs.csv"
+    assert csv_path.exists()
+    with csv_path.open(newline="", encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    assert rows[0]["sample_count"] == "6"

@@ -1,0 +1,64 @@
+{
+  "controlled_benchmark": {
+    "conditions": [
+      {
+        "median_pcscs_s": 0.036302038000030734,
+        "median_total_s": 0.0366126929998245,
+        "sample_count": 25
+      },
+      {
+        "median_pcscs_s": 0.13263041299978795,
+        "median_total_s": 0.1329501820000587,
+        "sample_count": 50
+      },
+      {
+        "median_pcscs_s": 0.5775705700002618,
+        "median_total_s": 0.585418430000118,
+        "sample_count": 100
+      },
+      {
+        "median_pcscs_s": 1.9584638209998957,
+        "median_total_s": 1.9619916970000304,
+        "sample_count": 200
+      },
+      {
+        "median_pcscs_s": 9.192815610999787,
+        "median_total_s": 9.197235673999785,
+        "sample_count": 400
+      }
+    ],
+    "empirical_loglog_slope_pcscs": 1.9852863839000177,
+    "empirical_loglog_slope_total": 1.9828786490488455,
+    "feature_dimension": 512,
+    "measured_repeats": 5,
+    "n_steps": 250,
+    "tracking": false,
+    "warmup_runs": 1
+  },
+  "date": "2026-10-01",
+  "end_to_end": {
+    "mean_gpu_utilization_percent": 4.634615384615385,
+    "n_layers": 13,
+    "n_samples": 180,
+    "peak_gpu_memory_used_bytes": 833617920,
+    "peak_gpu_utilization_percent": 36.0,
+    "peak_process_rss_bytes": 7762845696,
+    "wall_clock_s": 499.2707273010001
+  },
+  "environment": {
+    "cuda_runtime": "13.0",
+    "gpu": "Tesla T4",
+    "gpu_total_memory_bytes": 15637086208,
+    "host_ram_bytes": 13605830656,
+    "logical_cpu_count": 2,
+    "python": "3.13.15",
+    "torch": "2.11.0+cu130"
+  },
+  "schema_version": 1,
+  "source_commit": "fb2867b197cbfd5b67beb5a7855b64eb8a873c08",
+  "vgg16_layer_analysis": {
+    "pearson_dimension_vs_similarity_time": 0.9973655991413115,
+    "pearson_dimension_vs_total_time": 0.9692327230249649,
+    "spearman_dimension_vs_total_time": 0.98058067569092
+  }
+}

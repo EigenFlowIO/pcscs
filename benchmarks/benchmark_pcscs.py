@@ -211,7 +211,15 @@ def run_benchmark(config_path: Path, output_dir: Path, sample_sizes: List[int] |
         for row in raw_rows:
             telem = row["telemetry_summary"]
             flat = {k: row.get(k) for k in fields}
-            for k in fields:
+            telemetry_fields = {
+                "peak_process_rss_bytes",
+                "mean_process_cpu_percent",
+                "peak_process_cpu_percent",
+                "mean_gpu_utilization_percent",
+                "peak_gpu_utilization_percent",
+                "peak_gpu_memory_used_bytes",
+            }
+            for k in telemetry_fields:
                 if k in telem:
                     flat[k] = telem[k]
             writer.writerow(flat)
