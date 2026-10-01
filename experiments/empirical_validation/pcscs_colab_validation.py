@@ -109,97 +109,84 @@ def suffix_for(content_type: str | None, url: str) -> str:
 
 
 def still_image_urls(record: dict[str, Any]) -> list[str]:
+    """Return unique publisher media identifiers for StillImage records.
+
+    GBIF distinguishes the direct media ``identifier`` from ``references``
+    (typically an HTML/resource page). Only identifiers are valid inputs to
+    GBIF's occurrence-image cache.
+    """
     urls: list[str] = []
     for media in record.get("media", []):
         if media.get("type") != "StillImage":
             continue
-        for key in ("identifier", "references"):
-            url = media.get(key)
-            if isinstance(url, str) and url.startswith(("http://", "https://")) and url not in urls:
-                urls.append(url)
+        url = media.get("identifier")
+        if isinstance(url, str) and url.startswith(("http://", "https://")) and url not in urls:
+            urls.append(url)
     return urls
 
 
-def _browser_headers(url: str, referer: str | None = None) -> dict[str, str]:
-    parsed = urlparse(url)
-    origin = f"{parsed.scheme}://{parsed.netloc}/" if parsed.scheme and parsed.netloc else None
-    headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-            "(KHTML, like Gecko) Chrome/140.0 Safari/537.36"
-        ),
-        "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Cache-Control": "no-cache",
-    }
-    if referer or origin:
-        headers["Referer"] = referer or origin  # type: ignore[assignment]
-    return headers
+def still_image_references(record: dict[str, Any]) -> list[str]:
+    refs: list[str] = []
+    for media in record.get("media", []):
+        if media.get("type") != "StillImage":
+            continue
+        url = media.get("references")
+        if isinstance(url, str) and url.startswith(("http://", "https://")) and url not in refs:
+            refs.append(url)
+    return refs
 
 
-def _download_image(urls: list[str], timeout: tuple[int, int] = (8, 25)) -> tuple[bytes, str, str | None, list[dict[str, Any]]]:
-    """Try all archived media URLs with browser-compatible headers.
+def gbif_occurrence_cache_url(occurrence_key: int, media_identifier: str) -> str:
+    """Build GBIF's documented cached occurrence-image URL.
 
-    Returns raw bytes, the successful URL, content type, and a compact attempt log.
-    The browser-like request path is intentional: several GBIF media providers
-    allow interactive image access but reject minimal HTTP clients.
+    GBIF identifies a media item in its cache by the occurrence key plus the
+    hexadecimal MD5 digest of the publisher's media identifier URL. MD5 here is
+    an addressing convention defined by the GBIF API, not a security primitive.
     """
-    import requests
-    from requests.adapters import HTTPAdapter
-    from urllib3.util.retry import Retry
+    digest = hashlib.md5(media_identifier.encode("utf-8")).hexdigest()
+    return (
+        "https://api.gbif.org/v1/image/cache/occurrence/"
+        f"{int(occurrence_key)}/media/{digest}"
+    )
 
+
+def _download_image_from_gbif_cache(
+    session: Any,
+    occurrence_key: int,
+    identifiers: list[str],
+    timeout: tuple[int, int] = (8, 60),
+) -> tuple[bytes, str, str, str | None, list[dict[str, Any]]]:
+    """Retrieve an occurrence image through GBIF's image cache.
+
+    Publisher image servers are intentionally *not* scraped directly. GBIF's
+    own documentation provides a cache endpoint for occurrence media and asks
+    scripted clients to limit usage to a single HTTP connection. The caller
+    therefore supplies one shared ``requests.Session`` and selection is
+    sequential.
+
+    Returns raw bytes, cache URL, publisher identifier, content type, and an
+    attempt log.
+    """
     attempts: list[dict[str, Any]] = []
-    for url in urls:
-        parsed = urlparse(url)
-        referers = [None]
-        if parsed.netloc.endswith("ala.org.au"):
-            referers = ["https://biocache.ala.org.au/", "https://www.ala.org.au/", None]
-        elif parsed.netloc:
-            referers = [f"{parsed.scheme}://{parsed.netloc}/", None]
-
-        for referer in referers:
-            session = requests.Session()
-            retry = Retry(
-                total=2,
-                connect=2,
-                read=2,
-                status=2,
-                backoff_factor=0.35,
-                status_forcelist=(429, 500, 502, 503, 504),
-                allowed_methods=frozenset(["GET"]),
-                raise_on_status=False,
-            )
-            session.mount("http://", HTTPAdapter(max_retries=retry))
-            session.mount("https://", HTTPAdapter(max_retries=retry))
-            try:
-                r = session.get(
-                    url,
-                    headers=_browser_headers(url, referer),
-                    timeout=timeout,
-                    allow_redirects=True,
-                )
-                attempts.append({
-                    "url": url,
-                    "host": parsed.netloc,
-                    "status": int(r.status_code),
-                    "referer": referer,
-                })
-                if r.status_code == 200 and r.content:
-                    return r.content, r.url, r.headers.get("Content-Type"), attempts
-                if r.status_code != 403:
-                    break
-            except Exception as exc:
-                attempts.append({
-                    "url": url,
-                    "host": parsed.netloc,
-                    "error": type(exc).__name__,
-                    "message": str(exc)[:240],
-                    "referer": referer,
-                })
-                break
-            finally:
-                session.close()
-    raise RuntimeError(f"all media URLs failed ({len(attempts)} HTTP attempts)")
+    for identifier in identifiers:
+        cache_url = gbif_occurrence_cache_url(occurrence_key, identifier)
+        try:
+            r = session.get(cache_url, timeout=timeout, allow_redirects=True)
+            attempts.append({
+                "identifier": identifier,
+                "cache_url": cache_url,
+                "status": int(r.status_code),
+            })
+            if r.status_code == 200 and r.content:
+                return r.content, cache_url, identifier, r.headers.get("Content-Type"), attempts
+        except Exception as exc:
+            attempts.append({
+                "identifier": identifier,
+                "cache_url": cache_url,
+                "error": type(exc).__name__,
+                "message": str(exc)[:240],
+            })
+    raise RuntimeError(f"all GBIF cache URLs failed ({len(attempts)} HTTP attempts)")
 
 
 def bootstrap_repo(repo_url: str, ref: str, work_root: Path, status: dict[str, Any]) -> Path:
@@ -275,6 +262,7 @@ def build_candidate_pool(cfg: dict[str, Any], config_path: Path, data_dir: Path)
         candidates = []
         for rec in r.json().get("results", []):
             urls = still_image_urls(rec)
+            refs = still_image_references(rec)
             key = rec.get("key")
             if key is None or not urls:
                 continue
@@ -282,7 +270,8 @@ def build_candidate_pool(cfg: dict[str, Any], config_path: Path, data_dir: Path)
                 {
                     "occurrence_key": int(key),
                     "media_url": urls[0],
-                    "media_urls": urls,
+                    "media_identifiers": urls,
+                    "media_references": refs,
                     "scientific_name": rec.get("scientificName"),
                     "species": rec.get("species"),
                     "institution_code": rec.get("institutionCode"),
@@ -305,6 +294,8 @@ def _find_next_valid_candidate(
     start_index: int,
     min_w: int,
     min_h: int,
+    session: Any,
+    timeout: tuple[int, int],
 ) -> tuple[dict[str, Any] | None, int, dict[str, Any]]:
     """Scan one family's candidates in deterministic order until one image is usable."""
     from PIL import Image
@@ -324,10 +315,15 @@ def _find_next_valid_candidate(
     for idx in range(start_index, len(candidates)):
         cand = candidates[idx]
         diag["candidate_attempts"] += 1
-        urls = list(cand.get("media_urls") or [cand.get("media_url")])
-        urls = [u for u in urls if isinstance(u, str) and u.startswith(("http://", "https://"))]
+        identifiers = list(cand.get("media_identifiers") or [cand.get("media_url")])
+        identifiers = [u for u in identifiers if isinstance(u, str) and u.startswith(("http://", "https://"))]
         try:
-            raw, successful_url, content_type, attempts = _download_image(urls)
+            raw, cache_url, successful_identifier, content_type, attempts = _download_image_from_gbif_cache(
+                session,
+                int(cand["occurrence_key"]),
+                identifiers,
+                timeout=timeout,
+            )
             diag["http_attempts"] += len(attempts)
             for a in attempts:
                 if "status" in a and a["status"] != 200:
@@ -347,7 +343,9 @@ def _find_next_valid_candidate(
                 "imagenet_class": fam["imagenet_class"],
                 "imagenet_index": fam["imagenet_index"],
                 **cand,
-                "media_url": successful_url,
+                "media_url": successful_identifier,
+                "publisher_media_identifier": successful_identifier,
+                "gbif_cache_url": cache_url,
                 "original_media_url": cand.get("media_url"),
                 "downloaded_content_type": content_type,
                 "raw_bytes": raw,
@@ -395,6 +393,7 @@ def freeze_sample(
     diagnostics: dict[str, Any] = {
         "schema_version": 1,
         "selection_design": "deterministic_adaptive_round_robin_family_stratified",
+        "image_acquisition": "gbif_occurrence_image_cache_single_connection",
         "target_total": target_total,
         "families": {
             fam["family"]: {
@@ -406,6 +405,24 @@ def freeze_sample(
             for fam in families
         },
     }
+
+    import requests
+    from requests.adapters import HTTPAdapter
+    from urllib3.util.retry import Retry
+
+    connect_timeout = int(cfg.get("download", {}).get("connect_timeout_s", 8))
+    read_timeout = int(cfg.get("download", {}).get("read_timeout_s", 60))
+    download_timeout = (connect_timeout, read_timeout)
+    cache_session = requests.Session()
+    cache_session.headers.update({"User-Agent": USER_AGENT, "Accept": "image/*,*/*;q=0.8"})
+    cache_session.mount(
+        "https://",
+        HTTPAdapter(max_retries=Retry(
+            total=1, connect=1, read=1, status=1, backoff_factor=0.5,
+            status_forcelist=(429, 500, 502, 503, 504),
+            allowed_methods=frozenset(["GET"]), raise_on_status=False,
+        )),
+    )
 
     round_number = 0
     while len(selected) < target_total:
@@ -419,53 +436,52 @@ def freeze_sample(
             flush=True,
         )
 
-        futures: dict[str, Any] = {}
-        with ThreadPoolExecutor(max_workers=min(12, len(active))) as executor:
-            for fam in active:
-                family = fam["family"]
-                futures[family] = executor.submit(
-                    _find_next_valid_candidate,
-                    fam,
-                    next_index[family],
-                    min_w,
-                    min_h,
-                )
+        # GBIF explicitly asks scripted image-cache users to limit usage to a
+        # single HTTP connection. One shared session is therefore used and
+        # families are processed sequentially in configured order. This is both
+        # gentler on the service and deterministic.
+        for fam in active:
+            if len(selected) >= target_total:
+                break
+            family = fam["family"]
+            result, new_index, diag = _find_next_valid_candidate(
+                fam,
+                next_index[family],
+                min_w,
+                min_h,
+                cache_session,
+                download_timeout,
+            )
+            next_index[family] = new_index
+            agg = diagnostics["families"][family]
+            agg["candidate_attempts"] += diag["candidate_attempts"]
+            agg["http_attempts"] += diag["http_attempts"]
+            for key, value in diag["failures"].items():
+                agg["failures"][key] = agg["failures"].get(key, 0) + value
 
-            # Consume results in configured family order, not completion order,
-            # so selection remains deterministic given the observed candidate pool.
-            for fam in active:
-                if len(selected) >= target_total:
-                    break
-                family = fam["family"]
-                result, new_index, diag = futures[family].result()
-                next_index[family] = new_index
-                agg = diagnostics["families"][family]
-                agg["candidate_attempts"] += diag["candidate_attempts"]
-                agg["http_attempts"] += diag["http_attempts"]
-                for key, value in diag["failures"].items():
-                    agg["failures"][key] = agg["failures"].get(key, 0) + value
+            if result is None:
+                exhausted[family] = True
+                continue
 
-                if result is None:
-                    exhausted[family] = True
-                    continue
+            raw = result.pop("raw_bytes")
+            sha = sha256_bytes(raw)
+            ext = suffix_for(result.get("downloaded_content_type"), result["media_url"])
+            filename = f"{family}__{result['occurrence_key']}__{sha[:12]}{ext}"
+            (image_dir / filename).write_bytes(raw)
+            result.update({
+                "sample_index": len(selected),
+                "filename": filename,
+                "sha256": sha,
+            })
+            selected.append(result)
+            agg["accepted"] += 1
+            print(
+                f"{family}: accepted occurrence {result['occurrence_key']} "
+                f"({len(selected)}/{target_total} total)",
+                flush=True,
+            )
 
-                raw = result.pop("raw_bytes")
-                sha = sha256_bytes(raw)
-                ext = suffix_for(result.get("downloaded_content_type"), result["media_url"])
-                filename = f"{family}__{result['occurrence_key']}__{sha[:12]}{ext}"
-                (image_dir / filename).write_bytes(raw)
-                result.update({
-                    "sample_index": len(selected),
-                    "filename": filename,
-                    "sha256": sha,
-                })
-                selected.append(result)
-                agg["accepted"] += 1
-                print(
-                    f"{family}: accepted occurrence {result['occurrence_key']} "
-                    f"({len(selected)}/{target_total} total)",
-                    flush=True,
-                )
+    cache_session.close()
 
     family_counts = Counter(x["family"] for x in selected)
     diagnostics["rounds"] = round_number

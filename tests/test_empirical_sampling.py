@@ -19,18 +19,28 @@ def _sha(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def test_still_image_urls_preserves_multiple_media_options():
+def test_still_image_urls_uses_identifiers_not_reference_pages():
     rec = {
         "media": [
-            {"type": "StillImage", "identifier": "https://example.org/a.jpg", "references": "https://example.org/a-ref.jpg"},
+            {"type": "StillImage", "identifier": "https://example.org/a.jpg", "references": "https://example.org/a-page"},
             {"type": "StillImage", "identifier": "https://example.org/a.jpg"},
+            {"type": "StillImage", "identifier": "https://example.org/b.jpg"},
             {"type": "Sound", "identifier": "https://example.org/nope.mp3"},
         ]
     }
     assert module.still_image_urls(rec) == [
         "https://example.org/a.jpg",
-        "https://example.org/a-ref.jpg",
+        "https://example.org/b.jpg",
     ]
+    assert module.still_image_references(rec) == ["https://example.org/a-page"]
+
+
+def test_gbif_occurrence_cache_url_matches_documented_addressing():
+    identifier = "https://example.org/specimen.jpg"
+    expected_md5 = hashlib.md5(identifier.encode("utf-8")).hexdigest()
+    assert module.gbif_occurrence_cache_url(123, identifier) == (
+        f"https://api.gbif.org/v1/image/cache/occurrence/123/media/{expected_md5}"
+    )
 
 
 def test_validate_sample_allows_unequal_family_counts(tmp_path: Path):
@@ -70,5 +80,4 @@ def test_validate_sample_allows_unequal_family_counts(tmp_path: Path):
         "samples": samples,
     }), encoding="utf-8")
 
-    # Unequal counts are intentional and must not fail validation.
     module.validate_sample(config, config_path, manifest_path, image_dir)
