@@ -1,4 +1,5 @@
 # Changelog
+- Commit the exact 250-image CC0/CC BY validation dataset for zero-image-network static repeatability and fix static runner runtime-status initialization.
 
 ## 0.1.0
 

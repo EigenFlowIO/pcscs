@@ -1,8 +1,10 @@
 # Google Colab execution
 
-The definitive validation runner is `pcscs_colab_validation.py`. It clones a fresh copy of the public repository at the requested Git ref, records the resolved commit, installs that checkout, runs the complete validation, runs the controlled PCSCS scaling benchmark, and creates one result bundle for downstream analysis.
+Two Colab workflows are intentionally distinct.
 
-Use a GPU-backed Colab runtime. Run this single **Python** cell:
+## Live acquisition / definitive empirical validation
+
+`pcscs_colab_validation.py` queries GBIF, constructs a licensed sample, retains the accepted image bytes, runs the scientific validation and controlled benchmark, and emits both a result bundle and a dataset bundle. Pin the exact Git commit.
 
 ```python
 import subprocess
@@ -10,8 +12,6 @@ from google.colab import files
 
 COMMIT = "<VERIFIED_GIT_COMMIT>"
 RUNNER = "/content/pcscs_colab_validation.py"
-BUNDLE = "/content/pcscs_validation_bundle.zip"
-DATASET = "/content/pcscs_validation_dataset.zip"
 
 subprocess.run([
     "wget", "-q",
@@ -25,12 +25,41 @@ subprocess.run([
     "--no-download",
 ], check=True)
 
-files.download(BUNDLE)
-files.download(DATASET)
+files.download("/content/pcscs_validation_bundle.zip")
+files.download("/content/pcscs_validation_dataset.zip")
 ```
 
-The explicit commit pin is required for the definitive run. The runner itself clones the repository at that exact commit and records the resolved commit in the output bundle.
+## Static repeatability from the repository
 
-The results bundle contains the frozen sample manifest, source hashes, scientific result arrays, layer metrics, full performance telemetry, the controlled scaling benchmark, environment metadata, and SHA-256 checksums. The dataset bundle contains the exact accepted image bytes plus per-image license and attribution metadata so the static repeatability dataset can be committed without depending on future remote-image availability.
+After the frozen dataset has been committed, do **not** upload a dataset ZIP and do **not** contact GBIF for specimen images. Clone the repository at the exact commit and run the static validator against the image files already in the repository.
 
-For a quick infrastructure-only check of the benchmark path, the validation runner accepts `--benchmark-sample-sizes`, but a reduced size list is not a substitute for the configured definitive execution.
+```python
+import subprocess
+from google.colab import files
+
+COMMIT = "<VERIFIED_STATIC_DATASET_COMMIT>"
+REPO = "/content/pcscs"
+OUTPUT = "/content/pcscs_static_repeatability_bundle.zip"
+
+subprocess.run(["git", "clone", "https://github.com/EigenFlowIO/pcscs.git", REPO], check=True)
+subprocess.run(["git", "-C", REPO, "checkout", COMMIT], check=True)
+subprocess.run(["python", "-m", "pip", "install", "-q", f"{REPO}[research,benchmark]"], check=True)
+
+subprocess.run([
+    "python",
+    f"{REPO}/experiments/empirical_validation/cache_static_dataset.py",
+    "--verify-only",
+], check=True)
+
+subprocess.run([
+    "python",
+    f"{REPO}/experiments/empirical_validation/static_repeatability.py",
+    "--work-root", "/content/pcscs_static_repeatability_work",
+    "--output", OUTPUT,
+    "--skip-benchmark",
+], check=True)
+
+files.download(OUTPUT)
+```
+
+The static runner's default dataset path is the committed `experiments/empirical_validation/static_dataset` directory. A filename/path mismatch therefore cannot arise from a notebook upload name.

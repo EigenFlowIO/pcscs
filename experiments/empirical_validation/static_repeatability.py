@@ -107,6 +107,7 @@ def main() -> None:
         "dataset_mode": "committed_static_images",
         "network_sample_acquisition": False,
         "dataset_dir": str(dataset_dir),
+        "runtime": {"python": sys.version, "platform": __import__("platform").platform()},
         "stages": [],
     }
 

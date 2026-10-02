@@ -19,8 +19,9 @@ def load_cache_module():
 
 def test_static_dataset_directory_is_repository_target():
     readme = (STATIC_DIR / "README.md").read_text(encoding="utf-8")
-    assert "pcscs_validation_dataset.zip" in readme
-    assert "never falls back to GBIF" in readme
+    assert "exact **250 image files**" in readme
+    assert "static_dataset/images" in readme or "images/" in readme
+    assert "MIT license" in readme
 
 
 def test_verify_materialized_dataset_on_tiny_fixture(tmp_path):
@@ -54,3 +55,7 @@ def test_static_repeatability_has_no_sample_acquisition_or_url_fallback():
     assert "freeze_sample(" not in source
     assert "import cache_static_dataset" not in source
     assert "gbif_cache_url" not in source
+
+def test_static_repeatability_initializes_shared_runtime_status():
+    source = (ROOT / "experiments" / "empirical_validation" / "static_repeatability.py").read_text(encoding="utf-8")
+    assert '"runtime": {"python": sys.version' in source

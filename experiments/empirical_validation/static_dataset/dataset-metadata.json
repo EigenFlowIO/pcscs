@@ -1,0 +1,8 @@
+{
+  "created_utc": "2026-10-02T00:19:34.191772+00:00",
+  "dataset_id": "PCSCS-EMPIRICAL-VALIDATION-2026-static-images",
+  "license_policy": "Every included image was selected only when GBIF supplied an exact multimedia license normalized to CC0 or CC-BY. IMAGE_LICENSES.csv preserves the original license and attribution metadata. Third-party image licenses are separate from the PCSCS software license.",
+  "manifest_sha256": "3e296bec703f4aa3410594999535d4974f284a067977201ecf0c1e33896711d9",
+  "sample_count": 250,
+  "schema_version": 1
+}

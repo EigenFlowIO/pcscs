@@ -58,32 +58,17 @@ The `scripts/` directory retains smaller workflow components for development, te
 
 ## Static repeatability dataset
 
-The live validation runner remains the acquisition-and-validation workflow. A separate static repeatability path is provided so later runs can use the exact accepted image bytes without querying GBIF or contacting image servers.
+The repository now contains the accepted **250-image frozen validation dataset** under `static_dataset/`. These are the exact image bytes produced by the definitive licensed acquisition run, not URLs to be resolved later. The directory includes the frozen manifest, per-image license/attribution ledger, dataset metadata, and SHA-256 checksums.
 
-The frozen definition lives in `static_dataset/sample-manifest.json`. Once the new 250-image licensed validation run is accepted, the exact images from `pcscs_validation_dataset.zip` belong in `static_dataset/images/`; each filename, SHA-256 hash, image dimensions, and media-license record are fixed by that manifest.
-
-To materialize the image set once from the already frozen manifest:
-
-```bash
-python experiments/empirical_validation/cache_static_dataset.py
-```
-
-The cache utility does **not** perform sample selection. It requests only the GBIF cache URLs already recorded in the definitive manifest and rejects any downloaded file whose SHA-256 or dimensions differ from the recorded sample. It also writes `checksums.sha256`, `dataset-metadata.json`, and `IMAGE_LICENSES.csv`.
-
-After the images are present, an offline image-sample verification can be run with:
+The static repeatability path is intentionally repository-native:
 
 ```bash
 python experiments/empirical_validation/cache_static_dataset.py --verify-only
-```
-
-The repeatability analysis is then run with:
-
-```bash
 python experiments/empirical_validation/static_repeatability.py
 ```
 
-`static_repeatability.py` performs no GBIF sample query and no image download. It verifies the committed static dataset first, then invokes the same VGG16 feature-extraction and PCSCS scientific-analysis functions used by `pcscs_colab_validation.py`.
+`static_repeatability.py` reads only `static_dataset/images/`. It performs no GBIF sample query, no specimen-image retrieval, and has no URL fallback. Before feature extraction it verifies the committed bytes against the manifest/checksum set.
 
-The static image set is intentionally separate from the live acquisition logic: the live runner can construct a new empirical sample when needed, while the static runner reproduces the frozen reference sample byte-for-byte.
+`cache_static_dataset.py` remains available as a maintenance/recovery utility for a frozen manifest, but it is **not** part of the normal repeatability path now that the exact image files are committed.
 
-Before distributing the cached image files publicly, review `IMAGE_LICENSES.csv` and the source media rights. The cache utility records available GBIF/media rights metadata but does not make a legal determination about redistribution.
+The images are third-party research media and are **not** licensed under the repository's MIT software license. `IMAGE_LICENSES.csv` records the exact media license and attribution metadata for each file. The accepted static set contains only media normalized to CC0 or CC BY by the acquisition workflow.

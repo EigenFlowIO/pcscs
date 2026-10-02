@@ -1,9 +1,17 @@
 # PCSCS static validation dataset
 
-This directory is the repository location for the accepted frozen image dataset used by `static_repeatability.py`.
+This directory contains the exact **250 image files** used in the definitive license-filtered empirical validation. The image bytes live under `static_dataset/images/`. The files are committed so the static repeatability workflow does not depend on GBIF or any external image server.
 
-The live validation runner creates `/content/pcscs_validation_dataset.zip`. That archive contains the exact accepted image bytes, `sample-manifest.json`, `sample_manifest.csv`, `IMAGE_LICENSES.csv`, `dataset-metadata.json`, and `checksums.sha256`.
+`sample-manifest.json` records the frozen sample and exact image SHA-256 hashes. `IMAGE_LICENSES.csv` records the per-image source license and attribution metadata. `checksums.sha256` covers the dataset artifact files emitted by the definitive validation run.
 
-After a validation run is accepted, copy the contents of that dataset archive into this directory and commit them. The static repeatability runner never downloads missing images and never falls back to GBIF; a missing or hash-mismatched local image is a hard failure.
+The definitive acquisition policy admitted only exact multimedia records whose licenses normalized to **CC0** or **CC BY**. Third-party image files retain those licenses and are **not licensed under the PCSCS MIT software license**.
 
-The current live validation configuration targets 250 specimens and accepts only media whose exact GBIF multimedia license normalizes to CC0 or CC BY. Third-party image licenses remain separate from the PCSCS software's MIT license.
+Run static repeatability from the repository root with:
+
+```bash
+python experiments/empirical_validation/static_repeatability.py
+```
+
+The static runner validates the local files before analysis and never falls back to remote image URLs.
+
+Repository-local image bytes live in `static_dataset/images/`; the static runner reads those files directly.
