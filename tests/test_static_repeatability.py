@@ -21,7 +21,7 @@ def test_static_dataset_directory_is_repository_target():
     readme = (STATIC_DIR / "README.md").read_text(encoding="utf-8")
     assert "exact **250 image files**" in readme
     assert "static_dataset/images" in readme or "images/" in readme
-    assert "MIT license" in readme
+    assert "MIT software license" in readme
 
 
 def test_verify_materialized_dataset_on_tiny_fixture(tmp_path):
