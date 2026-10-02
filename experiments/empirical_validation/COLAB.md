@@ -62,4 +62,4 @@ subprocess.run([
 files.download(OUTPUT)
 ```
 
-The static runner's default dataset path is the committed `experiments/empirical_validation/static_dataset` directory. A filename/path mismatch therefore cannot arise from a notebook upload name.
+The static runner's default dataset path is the committed `experiments/empirical_validation/static_dataset` directory. A filename/path mismatch therefore cannot arise from an interactive-session upload name.

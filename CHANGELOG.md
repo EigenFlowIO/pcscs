@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 - 2026-10-01
 
 - Commit the exact 250-image CC0/CC BY validation dataset for zero-image-network static repeatability and fix static runner runtime-status initialization.
 - Updated public terminology to describe the critical threshold as a descriptive statistic, including boundary-limited cases.
@@ -29,4 +29,4 @@
 - Expanded licensed-image discovery to scan up to 900 GBIF occurrence records per family while retaining a bounded deterministic pool of up to 120 license-compatible candidates per family.
 - Added explicit per-image attribution text and stronger dataset-package tests for the 250-image static validation workflow.
 - Removed the incomplete 180-image static-dataset placeholder so only an accepted frozen dataset is installed into `static_dataset/`.
-- Made static repeatability repository-native: the committed 250-image dataset is the default input, eliminating notebook upload filenames and dataset-path ambiguity.
+- Made static repeatability repository-native: the committed 250-image dataset is the default input, eliminating upload-filename and dataset-path ambiguity.
