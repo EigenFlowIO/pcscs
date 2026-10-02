@@ -69,6 +69,6 @@ python experiments/empirical_validation/static_repeatability.py
 
 `static_repeatability.py` reads only `static_dataset/images/`. It performs no GBIF sample query, no specimen-image retrieval, and has no URL fallback. Before feature extraction it verifies the committed bytes against the manifest/checksum set.
 
-`cache_static_dataset.py` remains available as a maintenance/recovery utility for a frozen manifest, but it is **not** part of the normal repeatability path now that the exact image files are committed.
+`cache_static_dataset.py` remains available as a maintenance utility for a frozen manifest, but it is **not** part of the normal repeatability path now that the exact image files are committed.
 
 The images are third-party research media and are **not** licensed under the repository's MIT software license. `IMAGE_LICENSES.csv` records the exact media license and attribution metadata for each file. The accepted static set contains only media normalized to CC0 or CC BY by the acquisition workflow.

@@ -1,5 +1,12 @@
 # Changelog
+
+## Unreleased
+
 - Commit the exact 250-image CC0/CC BY validation dataset for zero-image-network static repeatability and fix static runner runtime-status initialization.
+- Updated public terminology to describe the critical threshold as a descriptive statistic, including boundary-limited cases.
+- Replaced the superseded 180-sample performance reference with the definitive n=250 Tesla T4 validation and scaling measurements.
+- Revalidated repository-native static repeatability documentation against the frozen 250-image CC0/CC BY dataset.
+
 
 ## 0.1.0
 

@@ -75,55 +75,47 @@ Versioned JSON schemas are provided in `schemas/performance-telemetry.schema.jso
 
 ## Reference measurement: Colab Tesla T4
 
-A reproducible reference run was completed on 2026-10-01 from repository commit
-`fb2867b197cbfd5b67beb5a7855b64eb8a873c08`.
+A definitive licensed-image validation run was completed on 2026-10-01 from source commit
+`d761a31e4a821f8b193e4eb1860e3e2f2d05dc5d`. The frozen 250-image dataset was subsequently committed for repository-native static repeatability.
 
 Runtime environment:
 
 - Tesla T4 GPU;
-- 14.56 GiB reported GPU memory;
-- 12.67 GiB host RAM;
-- 2 logical CPUs;
+- 15 GiB reported GPU memory;
 - Python 3.13.15;
-- PyTorch 2.11.0 with CUDA 13.0.
+- PyTorch 2.11.0 with CUDA 13.0;
+- VGG16 `IMAGENET1K_V1`;
+- 250 specimens across 15 family strata;
+- 13 VGG16 convolutional layers.
 
-The instrumented end-to-end workflow analyzed 180 specimens across 13 VGG16 convolutional layers.
-Telemetry covered 499.27 seconds (8.32 minutes). Peak process RSS was 7.23 GiB. Mean GPU
-utilization was 4.63%, peak GPU utilization was 36%, and peak GPU memory used was 795.0 MiB.
+The instrumented end-to-end workflow covered **800.49 s (13.34 min)**. Major phases included 29.60 s for candidate-pool querying, 143.33 s for sample freezing/download, 71.58 s for feature extraction/materialization, 546.53 s for scientific validation, and 79.20 s for the controlled scaling benchmark. Phase timers may be nested and should not be summed indiscriminately.
 
-The low average GPU utilization is specific to this implementation and runtime. The full workflow
-contains substantial disk-backed feature handling, normalization, similarity construction, and
-CPU-side PCSCS analysis, so it is not expected to saturate the GPU continuously.
+Peak process RSS was **7.38 GiB**. Mean GPU utilization was **4.98%**, peak GPU utilization was **36%**, and peak GPU memory used was approximately **795 MiB**. These values describe this implementation/runtime, not a universal hardware requirement.
 
 ### Controlled sample-count benchmark
 
-The controlled benchmark used 512-dimensional deterministic feature matrices, 250 threshold steps,
-tracking disabled, one warm-up, and five measured repetitions per condition.
+The controlled benchmark used deterministic 512-dimensional feature matrices, 250 threshold steps, tracking disabled, one warm-up, and five measured repetitions.
 
-| Samples | Median total time | Median PCSCS time | Peak process RSS |
-| ---: | ---: | ---: | ---: |
-| 25 | 0.0366 s | 0.0363 s | 559.2 MiB |
-| 50 | 0.1330 s | 0.1326 s | 559.4 MiB |
-| 100 | 0.5854 s | 0.5776 s | 561.6 MiB |
-| 200 | 1.9620 s | 1.9585 s | 563.0 MiB |
-| 400 | 9.1972 s | 9.1928 s | 572.9 MiB |
+| Samples | Median total time | Median PCSCS time |
+| ---: | ---: | ---: |
+| 25 | 0.0354 s | 0.0350 s |
+| 50 | 0.1404 s | 0.1399 s |
+| 100 | 0.5491 s | 0.5481 s |
+| 200 | 2.0021 s | 2.0007 s |
+| 400 | 9.3359 s | 9.3315 s |
 
-A log-log fit over this measured range gives an empirical slope of approximately 1.98 for both
-total and PCSCS-only median runtime. This is consistent with approximately quadratic scaling over
-the tested range. It should not be interpreted as an empirical proof of asymptotic complexity.
+A log-log fit of median total time against sample count gives an empirical slope of approximately **1.99** over n=25-400. This is consistent with approximately quadratic timing over the measured range; it is not a proof of asymptotic complexity.
 
 ### Layer representation size and cost
 
-Across the 13 VGG16 layers, flattened activation dimensionality ranged from 3,211,264 values in the
-earliest analyzed layers to 100,352 in the deepest analyzed layers. Flattened dimension was strongly
-associated with layer-associated runtime (Pearson `r = 0.969`; Spearman `rho = 0.981`) and especially
-with cosine-similarity computation time (Pearson `r = 0.997`).
+Flattened activation dimensionality ranged from 3,211,264 values in the earliest analyzed layers to 100,352 in the deepest analyzed layers. Across the 13 layers, feature dimension was strongly associated with layer-associated runtime (Pearson `r = 0.994`; Spearman `rho = 0.981`) and with cosine-similarity computation time (Pearson `r = 0.997`).
 
-These measurements support a practical interpretation: for this workflow, representation size is a
-more direct predictor of computational cost than layer depth by itself.
+This supports a practical interpretation: in this workflow, representation size is a more direct predictor of layer cost than network depth alone.
+
+### Static repeatability timing
+
+A separate repository-native static repeatability execution using the committed image bytes completed in **549.37 s**. It omitted live sample acquisition and the controlled benchmark. Scientific result equality, rather than identical timing, is the repeatability criterion.
 
 ### Scope
 
-These values describe the measured Tesla T4 Colab environment and the exact benchmark configuration
-above. They are not universal hardware requirements. Broader architecture comparisons require separate
-measurements rather than extrapolation from this reference run.
+These measurements support claims about the recorded Tesla T4 environment and the exact configurations above. Broader architecture or hardware claims require separate measurements.

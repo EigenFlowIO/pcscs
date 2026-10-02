@@ -2,7 +2,7 @@
 
 Progressive Cosine Similarity Classification Sifting (PCSCS) is a post-hoc neural-network analysis toolkit for studying how samples are organized in learned representation spaces.
 
-PCSCS treats a set of neural representations as a similarity graph. At a chosen cosine-similarity threshold, samples are connected when their pairwise similarity exceeds that threshold. By sweeping the threshold from strict to permissive values, PCSCS tracks how connected components merge, identifies structural transition points, and exposes sample-level and layer-level organization that is difficult to see from predictions alone.
+PCSCS treats a set of neural representations as a similarity graph. At a chosen cosine-similarity threshold, samples are connected when their pairwise similarity exceeds that threshold. By sweeping the threshold from strict to permissive values, PCSCS tracks how connected components merge, reports descriptive transition summaries, and exposes sample-level and layer-level organization that is difficult to see from predictions alone.
 
 The package is designed for empirical analysis, quantitative comparison, statistical hypothesis workflows, and neural-network behavior interpretation. It is model-agnostic at the analysis stage: any representation matrix can be analyzed once feature vectors have been extracted.
 
@@ -134,7 +134,7 @@ Important methods:
 
 `find_critical_threshold(smooth_thresholds, smooth_classes, sigmoid_params=None)` computes the threshold at which the smoothed component-count curve has its maximum derivative with respect to increasing similarity threshold.
 
-The critical threshold is a descriptive structural statistic. It should be interpreted in relation to the representation, sample set, and threshold construction used in an analysis.
+The critical threshold is a descriptive structural statistic. It should be interpreted in relation to the representation, sample set, and threshold construction used in an analysis. If the maximum derivative occurs at the boundary of the analyzed threshold interval, the reported value is boundary-limited rather than evidence of an interior transition point.
 
 ## Feature extraction from PyTorch models
 
