@@ -72,3 +72,11 @@ python experiments/empirical_validation/static_repeatability.py
 `cache_static_dataset.py` remains available as a maintenance utility for a frozen manifest, but it is **not** part of the normal repeatability path now that the exact image files are committed.
 
 The images are third-party research media and are **not** licensed under the repository's MIT software license. `IMAGE_LICENSES.csv` records the exact media license and attribution metadata for each file. The accepted static set contains only media normalized to CC0 or CC BY by the acquisition workflow.
+
+## Human-curated static probe workflow
+
+The authoritative validation sample is now the 250-image human-curated static probe set committed under `static_dataset/`. Human review is part of sample construction: label/document-dominated, non-specimen, unusable, or severely obscured candidate images were rejected, and exact duplicate image bytes were excluded before the definitive run.
+
+The definitive empirical entry point is `static_empirical_analysis.py`. It operates only on committed image bytes and produces the primary PCSCS outputs plus full tracking/merge histories, filtration-faithful hierarchy data and dendrograms, critical-component image grids, cross-layer pairwise/sample trajectories, supporting spectral analysis, and performance evidence. `static_repeatability.py` remains the independent static rerun used to verify scientific repeatability after the definitive result bundle is ingested.
+
+See `COLAB.md` for the pinned clone-and-run workflow.

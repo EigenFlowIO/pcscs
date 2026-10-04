@@ -9,6 +9,7 @@ and critical threshold detection.
 from .core import PCSCS
 from .analysis import fit_sigmoid, find_critical_threshold, sigmoid_function
 from .utils import compute_similarity_matrix
+from .hierarchy import build_filtration_linkage, components_from_filtration_linkage, verify_filtration_linkage
 
 __version__ = "0.2.0"
 __author__ = "Andrew Hedman"
@@ -18,5 +19,8 @@ __all__ = [
     "fit_sigmoid", 
     "find_critical_threshold",
     "sigmoid_function",
-    "compute_similarity_matrix"
+    "compute_similarity_matrix",
+    "build_filtration_linkage",
+    "components_from_filtration_linkage",
+    "verify_filtration_linkage"
 ]

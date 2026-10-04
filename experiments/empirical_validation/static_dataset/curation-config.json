@@ -1,0 +1,31 @@
+{
+  "target_total": 250,
+  "families": [
+    "Apidae",
+    "Araneidae",
+    "Cancridae",
+    "Carabidae",
+    "Cicindelidae",
+    "Coccinellidae",
+    "Formicidae",
+    "Libellulidae",
+    "Nephropidae",
+    "Nymphalidae",
+    "Papilionidae",
+    "Pieridae",
+    "Salticidae",
+    "Scarabaeidae",
+    "Theraphosidae"
+  ],
+  "license_allowlist": [
+    "CC0",
+    "CC-BY"
+  ],
+  "minimum_width": 200,
+  "minimum_height": 200,
+  "exact_duplicate_policy": "reject by SHA-256 before human review",
+  "human_review": "one candidate at a time; Y keep; N reject",
+  "selection_strategy": "deterministic round-robin family acquisition subject to human visual approval",
+  "gbif_basis_of_record": "PRESERVED_SPECIMEN",
+  "gbif_media_type": "StillImage"
+}

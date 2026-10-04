@@ -1,17 +1,15 @@
-# PCSCS static validation dataset
+# Authoritative static empirical probe sample
 
-This directory contains the exact **250 image files** used in the definitive license-filtered empirical validation. The image bytes live under `static_dataset/images/`. The files are committed so the static repeatability workflow does not depend on GBIF or any external image server.
+This directory contains the exact **250 image files** in the human-curated probe sample used by the repository-native empirical validation. The sample is an analytical instrument for interrogating VGG16 internal representation geometry; it is not a biological-classification benchmark.
 
-`sample-manifest.json` records the frozen sample and exact image SHA-256 hashes. `IMAGE_LICENSES.csv` records the per-image source license and attribution metadata. `checksums.sha256` covers the dataset artifact files emitted by the definitive validation run.
+## Curation gate
 
-The definitive acquisition policy admitted only exact multimedia records whose licenses normalized to **CC0** or **CC BY**. Third-party image files retain those licenses and are **not licensed under the PCSCS MIT software license**.
+Candidate preserved-specimen images were drawn under the configured family-stratified acquisition design and exact-media CC0/CC-BY license gate. A human reviewer then inspected candidates one at a time and rejected label/document-dominated, non-specimen, badly cropped, severely obscured, or otherwise unsuitable images. Exact duplicate image bytes were rejected by SHA-256 before human review. Acquisition continued until 250 approved images remained.
 
-Run static repeatability from the repository root with:
+## Reproducibility
 
-```bash
-python experiments/empirical_validation/static_repeatability.py
-```
+`sample-manifest.json` is the normalized manifest consumed by the empirical runner. `curation-manifest.json`, `curation-config.json`, `human_rejections.csv`, and `automatic_skips.csv` preserve the curation provenance. `images/` contains the exact frozen bytes. `checksums.sha256` verifies the complete static dataset payload.
 
-The static runner validates the local files before analysis and never falls back to remote image URLs.
+The definitive run must clone a pinned repository commit and execute `static_empirical_analysis.py`; it must not reacquire specimen images.
 
-Repository-local image bytes live in `static_dataset/images/`; the static runner reads those files directly.
+The image files are third-party media and are not covered by the repository MIT software license.

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Replace the prior static validation sample with the authoritative 250-image human-curated probe set; exact duplicate image bytes and visually unsuitable label/document/non-specimen images are excluded before analysis.
+- Add `static_empirical_analysis.py`, the repository-native definitive runner for the curated sample. It preserves full PCSCS tracking and merge histories, filtration-faithful hierarchy outputs, critical-component image grids, cross-layer pair/sample trajectories, supporting spectral outputs, and performance evidence.
+- Add exact threshold-filtration linkage utilities so dendrogram cuts correspond to PCSCS connected components rather than an independent average-linkage clustering.
+- Update Colab guidance so definitive analysis clones a pinned repository commit and runs only against the committed static sample; live sample acquisition is no longer the authoritative manuscript workflow.
+
 ## 0.2.0 - 2026-10-01
 
 - Commit the exact 250-image CC0/CC BY validation dataset for zero-image-network static repeatability and fix static runner runtime-status initialization.

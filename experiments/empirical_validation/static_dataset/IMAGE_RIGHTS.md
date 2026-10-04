@@ -1,7 +1,7 @@
-# Image rights notice
+# Image rights
 
-The specimen images in this directory are third-party media retained for scientific reproducibility. They are not licensed under the PCSCS software MIT license.
+The committed empirical probe images are third-party media obtained through GBIF occurrence-media records. They are not covered by the repository MIT license.
 
-The definitive validation accepted only media records identified by GBIF as CC0 or CC BY. Exact source/license/attribution information for every image is recorded in `IMAGE_LICENSES.csv`.
+Only exact-media records normalized to **CC0** or **CC BY** were admitted. Per-image license, creator/rights-holder, source, and attribution information are recorded in `IMAGE_LICENSES.csv` and `sample-manifest.json`.
 
-For CC BY images, downstream redistributors must preserve the attribution required by the source license. CC0 images do not impose copyright attribution requirements, although preserving scientific provenance is recommended.
+The dataset was additionally human-curated for specimen-focused imagery suitable for the structured-probe experiment. Rejected candidate records are retained as metadata only in `human_rejections.csv`; rejected image bytes are not distributed here.

@@ -1,0 +1,15 @@
+family,occurrence_key,reason
+Nymphalidae,4974589339,download/decode:RuntimeError
+Cancridae,440009973,download/decode:RuntimeError
+Nephropidae,1318520997,download/decode:RuntimeError
+Cancridae,440000964,download/decode:RuntimeError
+Cancridae,440004021,download/decode:RuntimeError
+Cancridae,440016072,download/decode:RuntimeError
+Nephropidae,1322238202,download/decode:RuntimeError
+Cancridae,440016074,download/decode:RuntimeError
+Nephropidae,1322576322,download/decode:RuntimeError
+Cancridae,439997973,download/decode:RuntimeError
+Nephropidae,1322979531,download/decode:RuntimeError
+Cancridae,440004022,download/decode:RuntimeError
+Cancridae,440009974,download/decode:RuntimeError
+Cancridae,440000965,download/decode:RuntimeError

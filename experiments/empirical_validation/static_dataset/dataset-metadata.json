@@ -1,8 +1,37 @@
 {
-  "created_utc": "2026-10-02T00:19:34.191772+00:00",
-  "dataset_id": "PCSCS-EMPIRICAL-VALIDATION-2026-static-images",
-  "license_policy": "Every included image was selected only when GBIF supplied an exact multimedia license normalized to CC0 or CC-BY. IMAGE_LICENSES.csv preserves the original license and attribution metadata. Third-party image licenses are separate from the PCSCS software license.",
-  "manifest_sha256": "3e296bec703f4aa3410594999535d4974f284a067977201ecf0c1e33896711d9",
+  "title": "PCSCS human-curated structured arthropod probe sample",
   "sample_count": 250,
-  "schema_version": 1
+  "reviewed_candidate_count": 381,
+  "human_rejection_count": 131,
+  "automatic_skip_count": 14,
+  "unique_image_sha256": 250,
+  "family_counts": {
+    "Apidae": 8,
+    "Araneidae": 15,
+    "Cancridae": 11,
+    "Carabidae": 24,
+    "Cicindelidae": 5,
+    "Coccinellidae": 23,
+    "Formicidae": 15,
+    "Libellulidae": 27,
+    "Nephropidae": 22,
+    "Nymphalidae": 24,
+    "Papilionidae": 14,
+    "Pieridae": 22,
+    "Salticidae": 16,
+    "Scarabaeidae": 22,
+    "Theraphosidae": 2
+  },
+  "license_counts": {
+    "CC-BY": 171,
+    "CC0": 79
+  },
+  "minimum_dimensions": [
+    200,
+    200
+  ],
+  "basis_of_record": "PRESERVED_SPECIMEN",
+  "media_type": "StillImage",
+  "curation_method": "single-image sequential human Y/N review",
+  "curation_completed_utc": "2026-10-04T01:55:26Z"
 }

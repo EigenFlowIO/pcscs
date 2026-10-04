@@ -38,6 +38,7 @@ import argparse
 import csv
 import datetime as dt
 import hashlib
+import gzip
 import io
 import json
 import os
@@ -971,6 +972,8 @@ def run_pcscs_validation(
     scratch_dir: Path,
     status: dict[str, Any],
     monitor: Any,
+    extended_dir: Path | None = None,
+    spectral_steps: int = 0,
 ) -> None:
     import numpy as np
     import torch
@@ -980,6 +983,8 @@ def run_pcscs_validation(
     from pcscs.performance import reset_torch_cuda_peak_memory, torch_cuda_memory
 
     results_dir.mkdir(parents=True, exist_ok=True)
+    if extended_dir is not None:
+        extended_dir.mkdir(parents=True, exist_ok=True)
     manifest = load_json(manifest_path)
     rows = sorted(manifest["samples"], key=lambda x: x["sample_index"])
     labels = [jsonable_label(r) for r in rows]
@@ -1069,6 +1074,219 @@ def run_pcscs_validation(
                     else np.asarray([], dtype=float)
                 ),
             )
+
+        if extended_dir is not None:
+            # Preserve the rich PCSCS outputs needed for representation analysis.
+            import matplotlib
+            matplotlib.use("Agg", force=True)
+            import matplotlib.pyplot as plt
+            from pcscs.hierarchy import (
+                build_filtration_linkage,
+                plot_filtration_dendrogram,
+                verify_filtration_linkage,
+            )
+            from pcscs.tracking import analyze_sample_trajectories, find_most_similar_samples
+            from pcscs.spectral import SpectralAnalyzer
+
+            layer_ext = extended_dir / layer_key
+            layer_ext.mkdir(parents=True, exist_ok=True)
+
+            def _jsonable(obj: Any) -> Any:
+                if isinstance(obj, dict):
+                    return {str(k): _jsonable(v) for k, v in obj.items()}
+                if isinstance(obj, (list, tuple)):
+                    return [_jsonable(v) for v in obj]
+                if isinstance(obj, np.ndarray):
+                    return obj.tolist()
+                if isinstance(obj, (np.integer,)):
+                    return int(obj)
+                if isinstance(obj, (np.floating,)):
+                    return float(obj)
+                if isinstance(obj, (np.bool_,)):
+                    return bool(obj)
+                return obj
+
+            tracking = result.tracking_data or {}
+            tracking_payload = {
+                "sample_history": tracking.get("sample_history", {}),
+                "merge_events": tracking.get("merge_events", []),
+                "threshold_snapshots": tracking.get("threshold_snapshots", []),
+                "sample_labels": tracking.get("sample_labels", labels),
+            }
+            with gzip.open(layer_ext / "tracking.json.gz", "wt", encoding="utf-8") as f:
+                json.dump(_jsonable(tracking_payload), f, separators=(",", ":"))
+
+            trajectory_stats = analyze_sample_trajectories(tracking, layer_name)
+            dump_json(layer_ext / "sample_trajectories.json", _jsonable(trajectory_stats))
+            dump_json(
+                layer_ext / "most_similar_pairs.json",
+                _jsonable(find_most_similar_samples(tracking, n_pairs=50)),
+            )
+
+            # Exact hierarchy of the PCSCS threshold-graph filtration.
+            linkage_matrix = build_filtration_linkage(sim)
+            np.save(layer_ext / "filtration_linkage.npy", linkage_matrix)
+            verify_idx = np.linspace(0, len(result.thresholds) - 1, min(25, len(result.thresholds)), dtype=int)
+            verify_filtration_linkage(sim, linkage_matrix, result.thresholds[verify_idx])
+            with (layer_ext / "filtration_linkage.csv").open("w", newline="", encoding="utf-8") as f:
+                w = csv.writer(f)
+                w.writerow(["left_cluster", "right_cluster", "distance", "merge_similarity", "merged_size"])
+                for z in linkage_matrix:
+                    w.writerow([int(z[0]), int(z[1]), float(z[2]), float(1.0-z[2]), int(z[3])])
+
+            # Component membership at analytically important landmarks.
+            snapshots = tracking.get("threshold_snapshots", [])
+            landmark_specs = {
+                "critical": float(result.critical_threshold),
+                "midpoint": float((1.0 + result.convergence_threshold) / 2.0),
+                "near_convergence": float(result.convergence_threshold),
+            }
+            landmark_summary: dict[str, Any] = {}
+            for landmark, target in landmark_specs.items():
+                if not snapshots:
+                    continue
+                snap = min(snapshots, key=lambda x: abs(float(x["threshold"]) - target))
+                comps = [sorted(map(int, c)) for c in snap["clusters"]]
+                comps.sort(key=lambda c: (-len(c), c[0] if c else 10**9))
+                comp_records = []
+                for comp_idx, comp in enumerate(comps):
+                    fam_counts: dict[str, int] = {}
+                    for sample_i in comp:
+                        fam = rows[sample_i]["family"]
+                        fam_counts[fam] = fam_counts.get(fam, 0) + 1
+                    comp_records.append({
+                        "component_index": comp_idx,
+                        "size": len(comp),
+                        "sample_indices": comp,
+                        "family_counts": dict(sorted(fam_counts.items())),
+                    })
+                landmark_summary[landmark] = {
+                    "requested_threshold": target,
+                    "snapshot_threshold": float(snap["threshold"]),
+                    "n_components": int(snap["num_clusters"]),
+                    "components": comp_records,
+                }
+            dump_json(layer_ext / "landmark_components.json", landmark_summary)
+
+            # Layer trajectory/derivative figure.
+            fig, axes = plt.subplots(1, 2, figsize=(13, 5))
+            axes[0].plot(result.thresholds, result.num_classes, linewidth=1.2, label="components")
+            axes[0].plot(result.smooth_thresholds, result.smooth_classes, linewidth=1.4, label="fit/interpolation")
+            axes[0].axvline(result.critical_threshold, linestyle="--", linewidth=1.0, label="critical threshold")
+            axes[0].set_xlabel("Cosine similarity threshold")
+            axes[0].set_ylabel("Connected components")
+            axes[0].set_title(f"{layer_name}: component-count trajectory")
+            axes[0].legend(fontsize=8)
+            axes[0].grid(alpha=.25)
+            axes[1].plot(result.smooth_thresholds, result.derivative, linewidth=1.4)
+            axes[1].axvline(result.critical_threshold, linestyle="--", linewidth=1.0)
+            axes[1].set_xlabel("Cosine similarity threshold")
+            axes[1].set_ylabel("d(component count)/d(threshold)")
+            axes[1].set_title(f"{layer_name}: trajectory derivative")
+            axes[1].grid(alpha=.25)
+            fig.tight_layout()
+            fig.savefig(layer_ext / "trajectory_and_derivative.png", dpi=180)
+            plt.close(fig)
+
+            # Merge-event overview.
+            merge_events = tracking.get("merge_events", [])
+            if merge_events:
+                fig, ax = plt.subplots(figsize=(9, 5))
+                ax.scatter(
+                    [float(e["threshold"]) for e in merge_events],
+                    [len(e["samples_involved"]) for e in merge_events],
+                    s=10,
+                    alpha=.6,
+                )
+                ax.set_xlabel("Cosine similarity threshold")
+                ax.set_ylabel("Resulting component size")
+                ax.set_title(f"{layer_name}: PCSCS merge events")
+                ax.grid(alpha=.25)
+                fig.tight_layout()
+                fig.savefig(layer_ext / "merge_events.png", dpi=180)
+                plt.close(fig)
+
+            # Filtration-faithful dendrogram.  Leaf labels are stable sample IDs.
+            fig, ax = plt.subplots(figsize=(24, 9))
+            sample_ids = [str(r.get("sample_id", f"sample_{i:04d}")) for i, r in enumerate(rows)]
+            plot_filtration_dendrogram(
+                linkage_matrix,
+                labels=sample_ids,
+                threshold=float(result.critical_threshold),
+                ax=ax,
+                leaf_font_size=4.0,
+            )
+            ax.set_title(f"{layer_name}: PCSCS filtration hierarchy")
+            fig.tight_layout()
+            fig.savefig(layer_ext / "filtration_dendrogram.png", dpi=180)
+            plt.close(fig)
+
+            # Deterministic image grids for the largest critical-region components.
+            critical_info = landmark_summary.get("critical", {})
+            for comp in critical_info.get("components", [])[:6]:
+                if comp["size"] <= 1:
+                    continue
+                sample_indices = comp["sample_indices"][:25]
+                ncols = 5
+                nrows = int(np.ceil(len(sample_indices) / ncols))
+                fig, axes_grid = plt.subplots(nrows, ncols, figsize=(12, 2.6*nrows))
+                axes_arr = np.asarray(axes_grid, dtype=object).reshape(-1)
+                for axg in axes_arr:
+                    axg.axis("off")
+                from PIL import Image
+                for axg, sample_i in zip(axes_arr, sample_indices):
+                    row_meta = rows[sample_i]
+                    with Image.open(image_dir / row_meta["filename"]) as im:
+                        axg.imshow(im.convert("RGB"))
+                    axg.set_title(
+                        f"{sample_i}: {row_meta['family']}\n{row_meta.get('sample_id','')}",
+                        fontsize=7,
+                    )
+                    axg.axis("off")
+                shown_note = "" if comp["size"] <= 25 else f" (first 25 of {comp['size']})"
+                fig.suptitle(
+                    f"{layer_name} critical component {comp['component_index']}"
+                    f"; size={comp['size']}{shown_note}; theta={critical_info.get('snapshot_threshold', float('nan')):.4f}",
+                    fontsize=11,
+                )
+                fig.tight_layout(rect=[0, 0, 1, .96])
+                fig.savefig(layer_ext / f"critical_component_{comp['component_index']:02d}.png", dpi=160)
+                plt.close(fig)
+
+            # Use the package's spectral extension as supporting analysis, not as
+            # a replacement for the primary connectivity filtration.
+            if spectral_steps and spectral_steps > 0:
+                step_idx = np.linspace(
+                    0, len(result.thresholds) - 1,
+                    min(int(spectral_steps), len(result.thresholds)),
+                    dtype=int,
+                )
+                spectral_thresholds = result.thresholds[step_idx]
+                spectral = SpectralAnalyzer(sim).dynamic_spectral_analysis(
+                    spectral_thresholds,
+                    normalized=True,
+                    k=min(10, sim.shape[0] - 1),
+                )
+                spectral_payload = {
+                    "thresholds": spectral.thresholds,
+                    "eigenvalue_evolution": spectral.eigenvalue_evolution,
+                    "algebraic_connectivity_evolution": spectral.algebraic_connectivity_evolution,
+                    "spectral_gap_evolution": spectral.spectral_gap_evolution,
+                    "effective_dimension_evolution": spectral.effective_dimension_evolution,
+                    "n_components_evolution": spectral.n_components_evolution,
+                    "percolation_threshold": spectral.percolation_threshold,
+                    "spectral_critical_thresholds": spectral.spectral_critical_thresholds,
+                }
+                np.savez_compressed(
+                    layer_ext / "spectral_dynamic.npz",
+                    thresholds=spectral.thresholds,
+                    eigenvalue_evolution=spectral.eigenvalue_evolution,
+                    algebraic_connectivity=spectral.algebraic_connectivity_evolution,
+                    spectral_gap=spectral.spectral_gap_evolution,
+                    effective_dimension=spectral.effective_dimension_evolution,
+                    n_components=spectral.n_components_evolution,
+                )
+                dump_json(layer_ext / "spectral_summary.json", _jsonable(spectral_payload))
 
         layer_records = [x for x in monitor.layers if x.get("layer") == layer_name]
         phase_times = {

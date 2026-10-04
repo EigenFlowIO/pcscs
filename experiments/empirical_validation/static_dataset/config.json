@@ -1,6 +1,6 @@
 {
   "experiment_id": "PCSCS-EMPIRICAL-VALIDATION-2026",
-  "selection_design": "deterministic_adaptive_round_robin_family_stratified_gbif_cache",
+  "selection_design": "human_visual_curation_of_deterministic_round_robin_family_candidates",
   "target_total": 250,
   "minimum_width": 200,
   "minimum_height": 200,
@@ -120,5 +120,18 @@
     "read_timeout_s": 60,
     "http_connections": 1,
     "retries": 1
+  },
+  "human_visual_curation": {
+    "required": true,
+    "review_interface": "sequential_single_image_yes_no",
+    "quality_gate": "specimen-focused image suitable for visual-feature probing",
+    "reject_examples": [
+      "label_or_document_dominated",
+      "non_specimen",
+      "bad_crop_or_unusable_view",
+      "severe_obscuration"
+    ],
+    "deduplication": "exact_image_bytes_sha256_before_human_review",
+    "note": "The static dataset committed in this repository is the authoritative curated probe sample. The empirical run does not reacquire or replace images."
   }
 }
